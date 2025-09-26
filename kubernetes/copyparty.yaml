@@ -31,7 +31,7 @@ spec:
       volumes:
         - name: config
           hostPath:
-            path: /home/skarjala/development/cinnfra/apps/copyparty/config/
+            path: /home/skarjala/development/cinnfra/apps/copyparty/config/copyparty.conf
             type: DirectoryOrCreate
         - name: data
           hostPath:
@@ -50,4 +50,22 @@ spec:
   - protocol: TCP
     port: 80
     targetPort: 3923
-
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: copyparty
+  namespace: apps
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: fileshare.skarja.la
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: copyparty
+            port:
+              number: 80
