@@ -1,39 +1,12 @@
-# 0) Create and export an AGE key for SOPS
-mkdir -p ~/.config/sops
-age-keygen -o ~/.config/sops/age-key.txt
-export SOPS_AGE_KEY_FILE=~/.config/sops/age-key.txt
+# SOPS setup (Age)
 
-# 1) Initialize repo
-cd repo
-git init
+- Requirements: sops and age-keygen installed on this machine.
 
-# 2) Configure SOPS to auto-encrypt the Tailscale secret
-cat > .sops.yaml <<'YAML'
-creation_rules:
-  - path_regex: kubernetes/secrets/.*\.ya?ml$
-    age: [publickey:REPLACE_WITH_YOUR_AGE_PUBLIC_KEY]
-YAML
-# Get your AGE public key:
-#   age-keygen -y ~/.config/sops/age-key.txt
+- Generate and install a new Age key for SOPS (recommended):
+  python tools/init-sops.py --generate
 
-# 3) Write the Kubernetes Secret manifest (will be encrypted with SOPS)
-mkdir -p kubernetes/secrets
-cat > kubernetes/secrets/tailscale-operator.yaml <<'YAML'
-apiVersion: v1
-kind: Secret
-metadata:
-  name: operator-oauth
-  namespace: tailscale
-type: Opaque
-stringData:
-  client_id: tsc_XXXXXXXXXXXXXXXX      # from Tailscale OAuth client
-  client_secret: tsc_secret_XXXXXXXX   # from Tailscale OAuth client
-YAML
+- Or import an existing private key (you will be prompted to paste the line starting with AGE-SECRET-KEY-):
+  python tools/init-sops.py
 
-# 4) Encrypt it
-sops -e -i kubernetes/secrets/tailscale-operator.yaml
-
-# 5) Commit everything
-git add .
-git commit -m Bootstrap Tailscale operator chart + SOPS secret
+The script writes keys to ${XDG_CONFIG_HOME:-$HOME/.config}/sops/age/keys.txt and prints your Age public key (age1...). Use that public key in your .sops.yaml creation_rules.
 
