@@ -1,12 +1,16 @@
-# SOPS setup (Age)
+# SOPS setup
 
-- Requirements: sops and age-keygen installed on this machine.
+- If you don't have an existing sops key (fresh install), generate and install a new `age` key for `sops`:
 
-- Generate and install a new Age key for SOPS (recommended):
-  python tools/init-sops.py --generate
+```bash
+python tools/init-sops.py --generate
+```
 
-- Or import an existing private key (you will be prompted to paste the line starting with AGE-SECRET-KEY-):
-  python tools/init-sops.py
+- Otherwise, run the following and paste your key (including `AGE-SECRET-KEY-`):
 
-The script writes keys to ${XDG_CONFIG_HOME:-$HOME/.config}/sops/age/keys.txt and prints your Age public key (age1...). Use that public key in your .sops.yaml creation_rules.
+```bash
+python tools/init-sops.py
+```
+
+Once you're done, you can retrieve your key from `$XDG_CONFIG_HOME/.config/sops/age/keys.txt`.
 
