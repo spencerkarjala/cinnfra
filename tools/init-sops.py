@@ -165,20 +165,24 @@ def _ensure_sops_config(public_key: str) -> Path:
     """
     Ensure a minimal .sops.yaml exists in the current working directory,
     configured to use the provided Age public key for files under kubernetes/secrets/.
-    If the file already exists, it will not be modified.
+    If a file created by this script already exists, it will be updated to the latest format.
     Returns the Path to the config file.
     """
     cfg_path = Path.cwd() / ".sops.yaml"
-    if cfg_path.exists():
-        return cfg_path
     content = (
         "# Managed by tools/init-sops.py\n"
         "# Uses Age public key to encrypt files matched by creation_rules.\n"
         "creation_rules:\n"
         "  - path_regex: kubernetes/secrets/.*\\.(ya?ml)$\n"
-        "    age:\n"
-        f"      - {public_key}\n"
+        f"    age: {public_key}\n"
     )
+    if cfg_path.exists():
+        existing = _read_text(cfg_path)
+        if existing == content:
+            return cfg_path
+        if existing.startswith("# Managed by tools/init-sops.py"):
+            _atomic_write(cfg_path, content, mode=0o644)
+        return cfg_path
     _atomic_write(cfg_path, content, mode=0o644)
     return cfg_path
 
