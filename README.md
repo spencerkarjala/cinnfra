@@ -53,7 +53,7 @@ Generate and Add Age Key for SOPS
 
 2. Extract the public key:
    ```bash
-   cat sops-age-key.txt | grep "public key" | cut -d " " -f 3
+   cat sops-age-key.txt | grep "public key" | cut -d " " -f 4
    ```
 
 3. Add the Age key to your Kubernetes cluster as a secret:
