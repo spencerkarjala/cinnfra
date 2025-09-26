@@ -1,65 +1,39 @@
-# Bootstrap Flux and SOPS with Age
+# 0) Create and export an AGE key for SOPS
+mkdir -p ~/.config/sops
+age-keygen -o ~/.config/sops/age-key.txt
+export SOPS_AGE_KEY_FILE=~/.config/sops/age-key.txt
 
-This guide provides the essential steps to bootstrap a local Kubernetes cluster with Flux and manage secrets using SOPS with Age.
+# 1) Initialize repo
+cd repo
+git init
 
-## Prerequisites
+# 2) Configure SOPS to auto-encrypt the Tailscale secret
+cat > .sops.yaml <<'YAML'
+creation_rules:
+  - path_regex: kubernetes/secrets/.*\.ya?ml$
+    age: [publickey:REPLACE_WITH_YOUR_AGE_PUBLIC_KEY]
+YAML
+# Get your AGE public key:
+#   age-keygen -y ~/.config/sops/age-key.txt
 
-- Kubernetes cluster (e.g., k3d, k3s)
-- `kubectl` installed
-- `sops` installed
-- `age` installed
+# 3) Write the Kubernetes Secret manifest (will be encrypted with SOPS)
+mkdir -p kubernetes/secrets
+cat > kubernetes/secrets/tailscale-operator.yaml <<'YAML'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: operator-oauth
+  namespace: tailscale
+type: Opaque
+stringData:
+  client_id: tsc_XXXXXXXXXXXXXXXX      # from Tailscale OAuth client
+  client_secret: tsc_secret_XXXXXXXX   # from Tailscale OAuth client
+YAML
 
-## Steps
+# 4) Encrypt it
+sops -e -i kubernetes/secrets/tailscale-operator.yaml
 
-1. **Create a Kubernetes Cluster** (if not already created):
-   ```bash
-   k3d cluster create mycluster
-   ```
+# 5) Commit everything
+git add .
+git commit -m Bootstrap Tailscale operator chart + SOPS secret
 
-2. **Install Flux:**
-   ```bash
-   kubectl apply -f https://github.com/fluxcd/flux2/releases/latest/download/install.yaml
-   ```
-
-3. **Generate and Add Age Key for SOPS:**
-
-   - Generate an Age key:
-     ```bash
-     age-keygen -o sops-age-key.txt
-     ```
-
-   - Extract the public key:
-     ```bash
-     cat sops-age-key.txt | grep "public key" | cut -d " " -f 4
-     ```
-
-   - Add the Age key to your Kubernetes cluster as a secret:
-     ```bash
-     kubectl create secret generic sops-age --namespace=flux-system --from-file=age.agekey=sops-age-key.txt
-     ```
-
-4. **Configure SOPS:**
-
-   - Create a `.sops.yaml` configuration file:
-     ```yaml
-     creation_rules:
-       - age: "your-age-public-key"
-     ```
-
-5. **Encrypt a Secret:**
-
-   - Create a plaintext `secret.yaml` and encrypt it:
-     ```bash
-     sops --encrypt --output secret.enc.yaml secret.yaml
-     ```
-
-6. **Commit Encrypted Secret:**
-
-   - Add and commit the encrypted secret and `.sops.yaml`:
-     ```bash
-     git add secret.enc.yaml .sops.yaml
-     git commit -m "Add encrypted secret"
-     git push
-     ```
-
-This concise guide should help you quickly set up Flux and SOPS with Age on a fresh cluster.
