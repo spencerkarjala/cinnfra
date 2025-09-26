@@ -48,31 +48,31 @@ Generate and Add Age Key for SOPS
 
 1. Generate an Age key:
    ```bash
-   age-keygen -o age-key.txt
+   age-keygen -o sops-age-key.txt
    ```
 
 2. Extract the public key:
    ```bash
-   cat age-key.txt | grep "public key" | cut -d " " -f 3
+   cat sops-age-key.txt | grep "public key" | cut -d " " -f 3
    ```
 
 3. Add the Age key to your Kubernetes cluster as a secret:
    ```bash
    kubectl create secret generic sops-age \
      --namespace=flux-system \
-     --from-file=age.agekey=age-key.txt
+     --from-file=age.agekey=sops-age-key.txt
    ```
 
 4. Update your Flux Kustomization to use the SOPS key:
    Ensure your Kustomization includes the secret reference for decryption.
 - Generate an Age key
-  - age-keygen -o age-key.txt
+  - age-keygen -o sops-age-key.txt
   - Extract the public key:
     ```bash
     cat age-key.txt | grep "public key" | cut -d " " -f 3
     ```
 - Export keys (for backup)
-  - Store the `age-key.txt` file securely
+  - Store the `sops-age-key.txt` file securely
 - Create sops config
   - Create a .sops.yaml at the repo root or at the path where secrets are stored with:
 creation_rules:
