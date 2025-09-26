@@ -12,5 +12,5 @@ python tools/init-sops.py --generate
 python tools/init-sops.py
 ```
 
-Once you're done, you can retrieve your key from `$XDG_CONFIG_HOME/.config/sops/age/keys.txt`.
+Once you're done, you can retrieve your key from `$XDG_CONFIG_HOME/.config/sops/age/keys.txt`. If you generated a new key, update `.sops.yaml` with the new public key.
 
