@@ -115,26 +115,23 @@ def _generate_key_block_with_age_keygen() -> tuple[str, str]:
     Returns (block_text, public_key).
     block_text contains the lines to be appended to keys.txt for this key.
     """
-    with tempfile.NamedTemporaryFile("w", delete=False) as tf:
-        tmp_path = tf.name
-    try:
-        # Generate new key file
-        run(["age-keygen", "-o", tmp_path], check=True, capture_output=True, text=True)
-        content = Path(tmp_path).read_text(encoding="utf-8")
-        # Derive public key to report back (and validate content)
-        cp = run(["age-keygen", "-y", tmp_path], check=True, capture_output=True, text=True)
-        public_key = cp.stdout.strip()
-        block = content.rstrip() + "\n"
-        return block, public_key
-    except CalledProcessError as e:
-        raise RuntimeError(
-            f"age-keygen failed with exit code {e.returncode}: {e.stderr}"
-        ) from e
-    finally:
+    # age-keygen -o expects the file to NOT exist yet. Use a temp directory
+    # and point it at a fresh path to avoid "file exists" errors.
+    with tempfile.TemporaryDirectory() as td:
+        tmp_path = str(Path(td) / "age-key.txt")
         try:
-            os.remove(tmp_path)
-        except OSError:
-            pass
+            # Generate new key file
+            run(["age-keygen", "-o", tmp_path], check=True, capture_output=True, text=True)
+            content = Path(tmp_path).read_text(encoding="utf-8")
+            # Derive public key to report back (and validate content)
+            cp = run(["age-keygen", "-y", tmp_path], check=True, capture_output=True, text=True)
+            public_key = cp.stdout.strip()
+            block = content.rstrip() + "\n"
+            return block, public_key
+        except CalledProcessError as e:
+            raise RuntimeError(
+                f"age-keygen failed with exit code {e.returncode}: {e.stderr}"
+            ) from e
 
 
 def _compose_block_from_secret(secret_key_line: str, public_key: str) -> str:
