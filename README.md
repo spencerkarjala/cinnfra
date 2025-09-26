@@ -44,7 +44,30 @@ Bootstrap Flux to Git repo
 - Note: When you install the Flux CLI later, you can bootstrap with:
   - flux bootstrap github ...
 
-Prepare secrets encryption with SOPS
+Generate and Add GPG Key for SOPS
+
+1. Generate a GPG key:
+   ```bash
+   gpg --full-generate-key
+   gpg --list-secret-keys --keyid-format=long
+   ```
+   Note the KEY_ID, e.g., 0123ABCD.
+
+2. Export the GPG key for backup:
+   ```bash
+   gpg --armor --export 0123ABCD > pubkey.asc
+   gpg --armor --export-secret-keys 0123ABCD > privkey.asc
+   ```
+
+3. Add the GPG key to your Kubernetes cluster as a secret:
+   ```bash
+   kubectl create secret generic sops-gpg \
+     --namespace=flux-system \
+     --from-file=sops.asc=pubkey.asc
+   ```
+
+4. Update your Flux Kustomization to use the SOPS key:
+   Ensure your Kustomization includes the secret reference for decryption.
 - Generate a GPG key
   - gpg --full-generate-key
   - gpg --list-secret-keys --keyid-format=long
