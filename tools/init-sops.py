@@ -178,6 +178,8 @@ def main(argv: list[str] | None = None) -> int:
     _require_age_keygen()
     keys_path = _keys_txt_path()
 
+    print(f"Using keys_path: {keys_path}")
+
     if args.generate:
         try:
             block, public_key = _generate_key_block_with_age_keygen()
