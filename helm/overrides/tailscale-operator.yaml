@@ -1,0 +1,32 @@
+# Override values for the Tailscale Operator Helm chart to use an existing Secret
+# This references the SOPS-managed Secret at kubernetes/secrets/tailscale-operator.yaml
+# The Secret should contain the keys:
+#   - client_id
+#   - client_secret
+#
+# Notes:
+# - Unknown keys in Helm values are ignored, so this file includes common patterns used by
+#   Tailscale Operator charts to reference an existing secret. Your chart will use whichever
+#   of these it supports.
+
+# Prefer charts that support an explicit existing secret for OAuth credentials
+oauth:
+  # If the chart supports providing the secret directly, set it here:
+  existingSecret: tailscale-operator
+  # If the chart supports specifying the keys inside that secret:
+  clientIdKey: client_id
+  clientSecretKey: client_secret
+  # Ensure inline credentials are not used/created by the chart:
+  clientId: ""
+  clientSecret: ""
+
+# Many charts also support wiring secrets through envFrom on the operator Deployment
+operator:
+  extraEnvFrom:
+    - secretRef:
+        name: tailscale-operator
+
+# Some charts support toggling internal secret creation logic; this makes sure it's off.
+secret:
+  create: false
+  name: tailscale-operator
