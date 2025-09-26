@@ -5,7 +5,7 @@ This README documents steps to bootstrap a local k3s cluster, configure Flux for
 Prerequisites
 - Linux/macOS with Docker or other container runtime
 - kubectl
-- flux CLI
+- Flux CLI (optional; bootstrap can be done via manifests)
 - sops
 - git
 - k3d or kind or a local k3s setup
@@ -15,7 +15,7 @@ Install required tooling
 - k3d:
   - curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
 - Flux:
-  - curl -s https://fluxcd.io/install.sh | sudo bash
+  - flux installation is optional for bootstrapping; you can apply install manifests manually
 - sops:
   - macOS: brew install sops
   - Ubuntu/Debian: sudo apt-get install -y sops
@@ -33,16 +33,16 @@ Option B: direct k3s install
 - Note: This guide uses k3d for local development
 
 Bootstrap Flux to Git repo
-- Create or choose a Git repository for Flux manifests (GitHub, GitLab, or local)
-- Prepare a path structure, e.g., clusters/local/
-- Flux bootstrap:
-  - flux bootstrap github \
-      --owner <your-username> \
-      --repository <your-repo> \
-      --branch main \
-      --path clusters/local
-- Confirm Flux pods are running:
+- The repo is the current repository; Flux CLI is not installed on this machine, so bootstrap will be performed using manifests rather than the flux bootstrap command.
+- Ensure a path like clusters/local exists at the repo root for Flux to manage.
+- Manually install Flux controllers into the cluster by applying the official Flux install manifest (no CLI required):
+  - kubectl apply -f https://github.com/fluxcd/flux2/releases/latest/download/install.yaml
+- Create or apply a GitRepository and Kustomization resources later to connect to the repo (see sections below).
+- Verify Flux controllers are running:
   - kubectl get pods -n flux-system
+
+- Note: When you install the Flux CLI later, you can bootstrap with:
+  - flux bootstrap github ...
 
 Prepare secrets encryption with SOPS
 - Generate a GPG key
@@ -72,9 +72,8 @@ Integrate encryption with Flux
 - Alternatively, decrypt on CI and apply plain manifests using a CI job that has decryption keys
 
 Verify and operate
-- Flux status:
-  - flux get sources
-  - flux get kustomizations
+- Flux components:
+  - kubectl get pods -n flux-system
 - Cluster health:
   - kubectl get pods -A
 - Secrets rotation:
