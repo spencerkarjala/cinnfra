@@ -44,41 +44,39 @@ Bootstrap Flux to Git repo
 - Note: When you install the Flux CLI later, you can bootstrap with:
   - flux bootstrap github ...
 
-Generate and Add GPG Key for SOPS
+Generate and Add Age Key for SOPS
 
-1. Generate a GPG key:
+1. Generate an Age key:
    ```bash
-   gpg --full-generate-key
-   gpg --list-secret-keys --keyid-format=long
-   ```
-   Note the KEY_ID, e.g., 0123ABCD.
-
-2. Export the GPG key for backup:
-   ```bash
-   gpg --armor --export 0123ABCD > pubkey.asc
-   gpg --armor --export-secret-keys 0123ABCD > privkey.asc
+   age-keygen -o age-key.txt
    ```
 
-3. Add the GPG key to your Kubernetes cluster as a secret:
+2. Extract the public key:
    ```bash
-   kubectl create secret generic sops-gpg \
+   cat age-key.txt | grep "public key" | cut -d " " -f 3
+   ```
+
+3. Add the Age key to your Kubernetes cluster as a secret:
+   ```bash
+   kubectl create secret generic sops-age \
      --namespace=flux-system \
-     --from-file=sops.asc=pubkey.asc
+     --from-file=age.agekey=age-key.txt
    ```
 
 4. Update your Flux Kustomization to use the SOPS key:
    Ensure your Kustomization includes the secret reference for decryption.
-- Generate a GPG key
-  - gpg --full-generate-key
-  - gpg --list-secret-keys --keyid-format=long
-  - Note the KEY_ID, e.g., 0123ABCD
+- Generate an Age key
+  - age-keygen -o age-key.txt
+  - Extract the public key:
+    ```bash
+    cat age-key.txt | grep "public key" | cut -d " " -f 3
+    ```
 - Export keys (for backup)
-  - gpg --armor --export 0123ABCD > pubkey.asc
-  - gpg --armor --export-secret-keys 0123ABCD > privkey.asc
+  - Store the `age-key.txt` file securely
 - Create sops config
   - Create a .sops.yaml at the repo root or at the path where secrets are stored with:
 creation_rules:
-  - pgp: "0123ABCD"
+  - age: "your-age-public-key"
 - Create a plaintext secret.yaml
   - versioned under git, then encrypt:
   - sops --encrypt --output secret.enc.yaml secret.yaml
