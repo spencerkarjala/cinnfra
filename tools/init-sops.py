@@ -161,6 +161,28 @@ def _append_key_block(keys_path: Path, block: str, secret_key_line: str) -> None
     _atomic_write(keys_path, new_content, mode=0o600)
 
 
+def _ensure_sops_config(public_key: str) -> Path:
+    """
+    Ensure a minimal .sops.yaml exists in the current working directory,
+    configured to use the provided Age public key for files under kubernetes/secrets/.
+    If the file already exists, it will not be modified.
+    Returns the Path to the config file.
+    """
+    cfg_path = Path.cwd() / ".sops.yaml"
+    if cfg_path.exists():
+        return cfg_path
+    content = (
+        "# Managed by tools/init-sops.py\n"
+        "# Uses Age public key to encrypt files matched by creation_rules.\n"
+        "creation_rules:\n"
+        "  - path_regex: kubernetes/secrets/.*\\.(ya?ml)$\n"
+        "    age:\n"
+        f"      - {public_key}\n"
+    )
+    _atomic_write(cfg_path, content, mode=0o644)
+    return cfg_path
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Initialize SOPS Age keys in ${XDG_CONFIG_HOME:-$HOME/.config}/sops/age/keys.txt"
@@ -191,6 +213,8 @@ def main(argv: list[str] | None = None) -> int:
         _append_key_block(keys_path, block, secret_line)
         print(f"Age public key: {public_key}")
         print(f"Installed key to: {keys_path}")
+        cfg_path = _ensure_sops_config(public_key)
+        print(f"SOPS config: {cfg_path}")
         return 0
 
     # Prompt for existing private key
@@ -223,6 +247,8 @@ def main(argv: list[str] | None = None) -> int:
     _append_key_block(keys_path, block, secret_line)
     print(f"Age public key: {public_key}")
     print(f"Installed key to: {keys_path}")
+    cfg_path = _ensure_sops_config(public_key)
+    print(f"SOPS config: {cfg_path}")
     return 0
 
 
