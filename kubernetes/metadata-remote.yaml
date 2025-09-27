@@ -1,28 +1,28 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: navidrome
+  name: metadata-remote
   namespace: apps
   labels:
-    app.kubernetes.io/name: navidrome
+    app.kubernetes.io/name: metadata-remote
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: navidrome
+      app.kubernetes.io/name: metadata-remote
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: navidrome
+        app.kubernetes.io/name: metadata-remote
     spec:
       containers:
-      - name: navidrome
-        image: docker.io/deluan/navidrome:0.58.0
+      - name: metadata-remote
+        image: ghcr.io/wow-signal-dev/metadata-remote:1.2.0
         ports:
-        - containerPort: 4533
+        - containerPort: 8338
         volumeMounts:
         - name: music
-          mountPath: /data/music/
+          mountPath: /music/
       volumes:
       - name: music
         persistentVolumeClaim:
@@ -31,31 +31,31 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: navidrome
+  name: metadata-remote
   namespace: apps
 spec:
   selector:
-    app.kubernetes.io/name: navidrome
+    app.kubernetes.io/name: metadata-remote
   ports:
     - protocol: TCP
       port: 80
-      targetPort: 4533
+      targetPort: 8338
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: navidrome
+  name: metadata-remote
   namespace: apps
 spec:
   ingressClassName: traefik
   rules:
-  - host: music.skarja.la
+  - host: metadata-remote.skarja.la
     http:
       paths:
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: navidrome
+            name: metadata-remote
             port:
               number: 80
