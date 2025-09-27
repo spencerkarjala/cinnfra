@@ -20,17 +20,17 @@ spec:
         - containerPort: 3923
         volumeMounts:
           - name: config
-            mountPath: /cfg
+            mountPath: /cfg/copyparty.conf
           - name: data
             mountPath: /w
       volumes:
         - name: config
           hostPath:
-            path: /home/skarjala/development/cinnfra/apps/copyparty/config/copyparty.conf
-            type: DirectoryOrCreate
+            path: /home/skarjala/development/cinnfra/conf/copyparty/copyparty.conf
+            type: FileOrCreate
         - name: data
           hostPath:
-            path: /srv/copyparty/data/
+            path: /srv/data/copyparty/
             type: DirectoryOrCreate
 ---
 apiVersion: v1
