@@ -25,3 +25,31 @@ spec:
     - ReadWriteOnce
   hostPath:
     path: "/srv/persistent/music/"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: music-to-import
+  namespace: apps
+spec:
+  storageClassName: ""
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  volumeName: music-to-import
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: music-to-import
+  labels:
+    type: local
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/srv/persistent/music-to-import/"

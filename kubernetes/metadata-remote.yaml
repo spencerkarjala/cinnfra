@@ -21,10 +21,15 @@ spec:
         ports:
         - containerPort: 8338
         volumeMounts:
-        - name: music
-          mountPath: /music/
+        - name: music-to-import
+          mountPath: /music/todo/
+        - name: music-library
+          mountPath: /music/done/
       volumes:
-      - name: music
+      - name: music-to-import
+        persistentVolumeClaim:
+          claimName: music-to-import
+      - name: music-library
         persistentVolumeClaim:
           claimName: music
 ---
