@@ -23,6 +23,10 @@ spec:
             mountPath: /cfg/copyparty.conf
           - name: data
             mountPath: /w
+          - name: music-to-import
+            mountPath: /w/skarjala/music-to-import
+          - name: music
+            mountPath: /w/skarjala/music
       volumes:
         - name: config
           hostPath:
@@ -32,6 +36,12 @@ spec:
           hostPath:
             path: /srv/data/copyparty/
             type: DirectoryOrCreate
+        - name: music-to-import
+          persistentVolumeClaim:
+            claimName: music-to-import
+        - name: music
+          persistentVolumeClaim:
+            claimName: music
 ---
 apiVersion: v1
 kind: Service
