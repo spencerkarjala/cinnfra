@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: import-music
+  namespace: apps
+spec:
+  schedule: "* * * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: import-music
+            image: python:alpine3.21
+            command: ["python", "/scripts/import-music.py"]
+            volumeMounts:
+            - name: script
+              mountPath: scripts/import-music.py
+            - name: music-to-import
+              mountPath: /music/todo/
+            - name: music-library
+              mountPath: /music/done/
+          restartPolicy: Never
+          volumes:
+          - name: script
+            hostPath:
+              path: /home/skarjala/development/cinnfra/tools/import-music.py
+              type: File
+          - name: music-to-import
+            persistentVolumeClaim:
+              claimName: music-to-import
+          - name: music-library
+            persistentVolumeClaim:
+              claimName: music

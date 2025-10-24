@@ -1,0 +1,9 @@
+namespace: cloudflare
+helmCharts:
+  - name: external-dns
+    repo: https://kubernetes-sigs.github.io/external-dns/
+    version: 1.19.0
+    releaseName: external-dns
+    namespace: cloudflare
+    valuesFile: values.yaml
+    includeCRDs: true

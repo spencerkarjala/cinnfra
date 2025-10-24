@@ -20,7 +20,7 @@ spec:
         - containerPort: 3923
         volumeMounts:
           - name: config
-            mountPath: /cfg/copyparty.conf
+            mountPath: /cfg
           - name: data
             mountPath: /w
           - name: music-to-import
@@ -29,9 +29,11 @@ spec:
             mountPath: /w/skarjala/music
       volumes:
         - name: config
-          hostPath:
-            path: /home/skarjala/development/cinnfra/conf/copyparty/copyparty.conf
-            type: FileOrCreate
+          configMap:
+            name: copyparty-config
+            items:
+              - key: copyparty.conf
+                path: copyparty.conf
         - name: data
           hostPath:
             path: /srv/data/copyparty/
@@ -55,22 +57,3 @@ spec:
   - protocol: TCP
     port: 80
     targetPort: 3923
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: copyparty
-  namespace: apps
-spec:
-  ingressClassName: traefik
-  rules:
-  - host: fileshare.skarja.la
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: copyparty
-            port:
-              number: 80

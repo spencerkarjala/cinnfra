@@ -1,0 +1,11 @@
+resources:
+  - ../../apps/copyparty
+  - ../../apps/metadata-remote
+  - ../../apps/navidrome
+  - ../../apps/shared-storage
+  - ../../cluster/core/external-dns
+  - ../../cluster/core/namespaces
+  - ../../cluster/storage
+  - ../../network/gateway
+  - ../../network/ingress
+  - ../../ops/cron
