@@ -61,6 +61,37 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
         except Exception:
             return False
 
+    def preprocess_release(release_path: Path) -> None:
+        """
+        Check release-level conformity for ownership and permissions.
+        1. Verify all files and directory are owned by 1000:1000
+        2. Enforce 755 permissions on all files and the release directory
+        """
+        expected_uid = 1000
+        expected_gid = 1000
+        expected_permissions = 0o755
+
+        dir_stat = release_path.stat()
+        if dir_stat.st_uid != expected_uid or dir_stat.st_gid != expected_gid:
+            raise PermissionError(
+                f"Directory ownership mismatch: expected {expected_uid}:{expected_gid}, "
+                f"got {dir_stat.st_uid}:{dir_stat.st_gid}"
+            )
+
+        for file_path in release_path.iterdir():
+            if file_path.is_file():
+                file_stat = file_path.stat()
+                if file_stat.st_uid != expected_uid or file_stat.st_gid != expected_gid:
+                    raise PermissionError(
+                        f"{file_path.name}: ownership mismatch: expected {expected_uid}:{expected_gid}, "
+                        f"got {file_stat.st_uid}:{file_stat.st_gid}"
+                    )
+
+        release_path.chmod(expected_permissions)
+        for file_path in release_path.iterdir():
+            if file_path.is_file():
+                file_path.chmod(expected_permissions)
+
     def preprocess_track(track_path: Path) -> None:
         """
         Preprocess a single track - check and set metadata.
@@ -69,25 +100,6 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
         audio = mutagen.File(track_path)
         if audio is None:
             return
-
-        # Check conformity for file ownership and permissions
-        file_stat = track_path.stat()
-        expected_uid = 1000
-        expected_gid = 1000
-        expected_permissions = 0o755
-
-        actual_permissions = stat.S_IMODE(file_stat.st_mode)
-
-        if file_stat.st_uid != expected_uid or file_stat.st_gid != expected_gid:
-            raise PermissionError(
-                f"File ownership mismatch: expected {expected_uid}:{expected_gid}, "
-                f"got {file_stat.st_uid}:{file_stat.st_gid}"
-            )
-        if actual_permissions != expected_permissions:
-            raise PermissionError(
-                f"File permissions mismatch: expected {oct(expected_permissions)}, "
-                f"got {oct(actual_permissions)}"
-            )
 
         # Clear out any "Visit us at bandcamp.com" comments
         if hasattr(audio, 'tags') and audio.tags:
@@ -106,6 +118,12 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
 
     # Loop over and preprocess all tracks in the release, collecting errors as they arise
     for release_path in releases:
+        try:
+            preprocess_release(release_path)
+        except Exception as e:
+            failed_releases.append(FailedRelease(path=release_path, error=str(e)))
+            continue  # Skip to next release if release-level preprocessing fails
+
         track_errors = []
 
         for file_path in release_path.iterdir():
