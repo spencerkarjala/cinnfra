@@ -1,6 +1,7 @@
 from pathlib import Path
 from dataclasses import dataclass
 import mutagen
+import re
 
 ROOT_MUSIC_DIR = Path("/music/")
 LIBRARY_PATH = Path("/library/")  # TODO: Update with actual library path
@@ -54,6 +55,8 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
     successful_releases = []
     failed_releases = []
 
+    bandcamp_comment_pattern = re.compile(r"Visit https://.*\.bandcamp\.com", re.IGNORECASE)
+
     def is_music_file(file_path: Path) -> bool:
         try:
             return mutagen.File(file_path) is not None
@@ -63,9 +66,23 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
     def preprocess_track(track_path: Path) -> None:
         """
         Preprocess a single track - check and set metadata.
-        TODO: Implement metadata preprocessing logic
+        Currently removes bandcamp spam from comment fields.
         """
-        print(track_path)
+        audio = mutagen.File(track_path)
+        if audio is None:
+            return
+
+        # Clear out any "Visit us at bandcamp.com" comments
+        if hasattr(audio, 'tags') and audio.tags:
+            for key in audio.tags:
+                if 'comment' in key.lower():
+                    comment_value = audio.tags.get(key)
+                    comment_text = comment_value[0] if isinstance(comment_value, list) else str(comment_value)
+
+                    if bandcamp_comment_pattern.search(comment_text):
+                        print(comment_text)
+                        # del audio.tags[key]
+                        # audio.save()
 
     for release_path in releases:
         track_errors = []
