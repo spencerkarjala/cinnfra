@@ -3,8 +3,28 @@ from dataclasses import dataclass
 import mutagen
 import re
 import stat
+import subprocess
 
 ROOT_MUSIC_DIR = Path("/music/")
+
+TARGET_LOSSLESS_CODEC = ".flac"
+TARGET_LOSSY_CODEC = ".opus"
+SUPPORTED_LOSSLESS_CODECS = {'FLAC', 'WAV', 'AIFF', 'WavPack', 'ALAC', 'APE', 'TrueAudio'}
+SUPPORTED_LOSSY_CODECS = {'MP3', 'Vorbis', 'Opus', 'AAC', 'WMA', 'OGG'}
+
+file_extension_to_codec = {
+    '.flac': 'FLAC',
+    '.wav': 'WAV',
+    '.aiff': 'AIFF',
+    '.wv': 'WavPack',
+    '.ape': 'APE',
+    '.mp3': 'MP3',
+    '.ogg': 'OGG',
+    '.opus': 'Opus',
+    '.m4a': 'AAC',
+    '.mp4': 'AAC',
+    '.wma': 'WMA',
+}
 
 def identify_release_directories(root_dir: Path) -> list[Path]:
     """
@@ -92,14 +112,77 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
             if file_path.is_file():
                 file_path.chmod(expected_permissions)
 
-    def preprocess_track(track_path: Path) -> None:
+    def transcode_track(track_path: Path) -> Path:
         """
-        Preprocess a single track - check and set metadata.
-        Currently removes bandcamp spam from comment fields.
+        Transcode track to standard format:
+        - FLAC for lossless audio
+        - Opus 192k for lossy audio
+        Returns the (possibly updated) track path.
         """
         audio = mutagen.File(track_path)
         if audio is None:
-            return
+            raise ValueError("Unable to open audio file")
+
+        codec = file_extension_to_codec.get(track_path.suffix.lower())
+        if codec is None:
+            raise ValueError(f"Unknown file extension: {track_path.suffix}")
+
+        is_lossless = codec in SUPPORTED_LOSSLESS_CODECS
+        is_lossy = codec in SUPPORTED_LOSSY_CODECS
+
+        if not is_lossless and not is_lossy:
+            raise ValueError(f"Unknown codec: {codec}")
+        elif is_lossless and is_lossy:
+            raise ValueError(f"Somehow received file that's both lossless and lossy: {track_path}")
+
+        if (
+            codec == file_extension_to_codec[TARGET_LOSSLESS_CODEC]
+            or codec == file_extension_to_codec[TARGET_LOSSY_CODEC]
+        ):
+            print(f"  ✓ Already correct format: {track_path.name} ({codec})")
+            return track_path
+
+        if is_lossless:
+            new_path = track_path.with_suffix('.flac')
+            print(f"  → Would transcode {track_path.name} to FLAC: {track_path} -> {new_path}")
+            # subprocess.run([
+            #     'ffmpeg', '-i', str(track_path),
+            #     '-c:a', 'flac',
+            #     '-y',
+            #     str(new_path)
+            # ], check=True, capture_output=True)
+        else:
+            new_path = track_path.with_suffix('.opus')
+            print(f"  → Would transcode {track_path.name} to Opus 192k: {track_path} -> {new_path}")
+            # subprocess.run([
+            #     'ffmpeg', '-i', str(track_path),
+            #     '-c:a', 'libopus',
+            #     '-b:a', '192k',
+            #     '-y',
+            #     str(new_path)
+            # ], check=True, capture_output=True)
+
+        # if not new_path.exists():
+        #     raise RuntimeError(f"Transcoded file not created: {new_path}")
+
+        # track_path.unlink()
+        print(f"  → Would delete original: {track_path}")
+
+        return track_path  # Return original path since we didn't actually transcode
+
+    def preprocess_track(track_path: Path) -> Path:
+        """
+        Preprocess a single track - check and set metadata.
+        - Removes bandcamp spam from comment fields
+        Returns the (possibly updated) track path.
+        """
+        # First, transcode to standard format if needed
+        track_path = transcode_track(track_path)
+
+        # Load audio file for metadata processing
+        audio = mutagen.File(track_path)
+        if audio is None:
+            raise ValueError("Unable to open audio file")
 
         # Clear out any "Visit us at bandcamp.com" comments
         if hasattr(audio, 'tags') and audio.tags:
@@ -115,6 +198,8 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                     if bandcamp_comment_pattern.search(comment_text):
                         del audio.tags[tag]
                         audio.save()
+
+        return track_path
 
     # Loop over and preprocess all tracks in the release, collecting errors as they arise
     for release_path in releases:
