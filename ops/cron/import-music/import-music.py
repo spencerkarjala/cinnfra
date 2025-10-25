@@ -1,5 +1,7 @@
 from pathlib import Path
 
+ROOT_MUSIC_DIR = Path("/music/")
+
 # print([str(f) for f in Path("/music/").glob("**")])
 
 def identify_release_directories(root_dir: Path) -> list[Path]:
@@ -27,7 +29,7 @@ def identify_release_directories(root_dir: Path) -> list[Path]:
     return leaf_dirs
 
 def main() -> None:
-    print(identify_release_directories())
+    print(identify_release_directories(ROOT_MUSIC_DIR))
 
 if __name__ == "__main__":
     main()
