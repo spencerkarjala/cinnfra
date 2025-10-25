@@ -75,7 +75,10 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
         # Clear out any "Visit us at bandcamp.com" comments
         if hasattr(audio, 'tags') and audio.tags:
             for key in audio.tags:
-                if 'comment' in key.lower():
+                print(key)
+                # key_str = str(key).lower()
+
+                if 'comment' in key_str:
                     comment_value = audio.tags.get(key)
                     comment_text = comment_value[0] if isinstance(comment_value, list) else str(comment_value)
 
@@ -154,7 +157,7 @@ def main() -> None:
     # Step 1: Preprocess to catch annoying issues
     preprocessed_releases, preprocess_failures = preprocess_releases(releases_to_validate)
 
-    print(preprocess_failures)
+    # print(preprocess_failures)
 
     # Step 2: Validate releases
     # validated_releases, validation_failures = validate_releases(preprocessed_releases)
