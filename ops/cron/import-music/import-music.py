@@ -85,10 +85,10 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                     comment_text = comment_value[0] if isinstance(comment_value, list) else str(comment_value)
 
                     if bandcamp_comment_pattern.search(comment_text):
-                        print(comment_text)
-                        # del audio.tags[key]
-                        # audio.save()
+                        del audio.tags[key]
+                        audio.save()
 
+    # Loop over and preprocess all tracks in the release, collecting errors as they arise
     for release_path in releases:
         track_errors = []
 
@@ -159,7 +159,7 @@ def main() -> None:
     # Step 1: Preprocess to catch annoying issues
     preprocessed_releases, preprocess_failures = preprocess_releases(releases_to_validate)
 
-    # print(preprocess_failures)
+    print(preprocess_failures)
 
     # Step 2: Validate releases
     # validated_releases, validation_failures = validate_releases(preprocessed_releases)
