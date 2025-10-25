@@ -139,7 +139,6 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
             codec == file_extension_to_codec[TARGET_LOSSLESS_CODEC]
             or codec == file_extension_to_codec[TARGET_LOSSY_CODEC]
         ):
-            print(f"  ✓ Already correct format: {track_path.name} ({codec})")
             return track_path
 
         if is_lossless:
