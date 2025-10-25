@@ -4,9 +4,6 @@ import mutagen
 import re
 
 ROOT_MUSIC_DIR = Path("/music/")
-LIBRARY_PATH = Path("/library/")  # TODO: Update with actual library path
-
-# print([str(f) for f in Path("/music/").glob("**")])
 
 def identify_release_directories(root_dir: Path) -> list[Path]:
     """
@@ -76,16 +73,14 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
         if hasattr(audio, 'tags') and audio.tags:
             for tag in audio.tags:
                 # Each key can be a single string, or a (tag, value) tuple
-                tag = tag[0].lower() if isinstance(tag, tuple) else tag.lower()
+                tag_normalized = tag[0].lower() if isinstance(tag, tuple) else tag.lower()
 
-                print(f"the tag id is: {tag}")
-
-                if tag == "comment":
+                if tag_normalized == "comment":
                     comment_value = audio.tags.get(tag)
                     comment_text = comment_value[0] if isinstance(comment_value, list) else str(comment_value)
 
                     if bandcamp_comment_pattern.search(comment_text):
-                        del audio.tags[key]
+                        del audio.tags[tag]
                         audio.save()
 
     # Loop over and preprocess all tracks in the release, collecting errors as they arise
