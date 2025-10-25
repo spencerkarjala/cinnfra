@@ -74,12 +74,14 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
 
         # Clear out any "Visit us at bandcamp.com" comments
         if hasattr(audio, 'tags') and audio.tags:
-            for key in audio.tags:
-                print(key)
-                # key_str = str(key).lower()
+            for tag in audio.tags:
+                # Each key can be a single string, or a (tag, value) tuple
+                tag = tag[0].lower() if isinstance(tag, tuple) else tag.lower()
 
-                if 'comment' in key_str:
-                    comment_value = audio.tags.get(key)
+                print(f"the tag id is: {tag}")
+
+                if tag == "comment":
+                    comment_value = audio.tags.get(tag)
                     comment_text = comment_value[0] if isinstance(comment_value, list) else str(comment_value)
 
                     if bandcamp_comment_pattern.search(comment_text):
