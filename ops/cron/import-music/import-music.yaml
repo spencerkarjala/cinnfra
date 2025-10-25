@@ -4,6 +4,7 @@ metadata:
   name: import-music
   namespace: apps
 spec:
+  concurrencyPolicy: Forbid
   schedule: "* * * * *"
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 1

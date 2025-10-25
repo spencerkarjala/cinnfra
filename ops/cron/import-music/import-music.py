@@ -122,10 +122,9 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
             preprocess_release(release_path)
         except Exception as e:
             failed_releases.append(FailedRelease(path=release_path, error=str(e)))
-            continue  # Skip to next release if release-level preprocessing fails
+            continue
 
         track_errors = []
-
         for file_path in release_path.iterdir():
             if file_path.is_file() and is_music_file(file_path):
                 try:
