@@ -73,9 +73,10 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
         if hasattr(audio, 'tags') and audio.tags:
             for tag in audio.tags:
                 # Each key can be a single string, or a (tag, value) tuple
-                tag_normalized = tag[0].lower() if isinstance(tag, tuple) else tag.lower()
+                if isinstance(tag, tuple):
+                    tag = tag[0]
 
-                if tag_normalized == "comment":
+                if tag.lower() == "comment":
                     comment_value = audio.tags.get(tag)
                     comment_text = comment_value[0] if isinstance(comment_value, list) else str(comment_value)
 
