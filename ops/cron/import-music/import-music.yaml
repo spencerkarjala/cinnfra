@@ -13,11 +13,8 @@ spec:
         spec:
           containers:
           - name: import-music
-            image: python:alpine3.21
-            command: ["python", "/scripts/import-music.py"]
+            image: ghcr.io/spencerkarjala/import-music:latest
             volumeMounts:
-            - name: script
-              mountPath: scripts/import-music.py
             - name: music-to-import
               mountPath: /music/todo/
             - name: music-library
