@@ -5,7 +5,7 @@ import re
 import stat
 import subprocess
 
-ROOT_MUSIC_DIR = Path("/music/")
+ROOT_MUSIC_DIR = Path("/music/todo/")
 
 TARGET_LOSSLESS_CODEC = ".flac"
 TARGET_LOSSY_CODEC = ".opus"
