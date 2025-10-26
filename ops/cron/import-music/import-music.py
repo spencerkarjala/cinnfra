@@ -163,6 +163,14 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
 
             if hasattr(audio, 'pictures') and audio.pictures:
                 embedded_data = audio.pictures[0].data
+            elif (
+                isinstance(audio, mutagen.oggopus.OggOpus)
+                and 'metadata_block_picture' in audio
+                and len(audio['metadata_block_picture']) > 0
+            ):
+                picture_data = base64.b64decode(audio['metadata_block_picture'][0])
+                picture = mutagen.flac.Picture(picture_data)
+                embedded_data = picture.data
 
             if embedded_data:
                 embedded_hash = hashlib.sha256(embedded_data).digest()
