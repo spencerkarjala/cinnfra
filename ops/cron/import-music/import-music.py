@@ -138,10 +138,11 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                 img = rgb_img
             # img.save(target_cover_path, 'JPEG', quality=95)
 
+            print(f"would have saved {target_cover_path} and deleted {cover_path}")
+
             if not target_cover_path.exists():
                 raise RuntimeError(f"Failed to create {target_cover_path}")
 
-            print(f"would have saved {target_cover_path} and deleted {cover_path}")
             # cover_path.unlink()
             # cover_path = target_cover_path
 
