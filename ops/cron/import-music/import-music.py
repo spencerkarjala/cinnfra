@@ -182,7 +182,7 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
         if cover_path is None:
             raise FileNotFoundError("No cover image found")
 
-        # If not exactly "cover.jpg", re-encode to JPEG
+        # If not exactly "cover.jpg", re-encode to JPEG; inefficient, but simple
         target_cover_path = release_path / 'cover.jpg'
         if cover_path.name != 'cover.jpg':
             img = Image.open(cover_path)
@@ -282,7 +282,6 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
         embed_release_cover_art(release_path)
         preprocess_release_metadata(release_path)
 
-    # Process each release
     for release_path in releases:
         try:
             preprocess_release(release_path)
