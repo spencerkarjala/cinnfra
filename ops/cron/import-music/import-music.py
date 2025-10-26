@@ -114,7 +114,60 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
             if file_path.is_file():
                 file_path.chmod(expected_permissions)
 
-    def embed_cover_art(release_path: Path) -> None:
+    def transcode_release(release_path: Path) -> None:
+        """
+        Transcode all tracks in release to standard pre-chosen formats.
+        """
+        for file_path in release_path.iterdir():
+            if not file_path.is_file() or not is_music_file(file_path):
+                continue
+
+            audio = mutagen.File(file_path)
+            if audio is None:
+                raise ValueError(f"Unable to open audio file: {file_path}")
+
+            codec = file_extension_to_codec.get(file_path.suffix.lower())
+            if codec is None:
+                raise ValueError(f"Unknown file extension: {file_path.suffix}")
+
+            is_lossless = codec in SUPPORTED_LOSSLESS_CODECS
+            is_lossy = codec in SUPPORTED_LOSSY_CODECS
+
+            if not is_lossless and not is_lossy:
+                raise ValueError(f"Unknown codec: {codec}")
+            elif is_lossless and is_lossy:
+                raise ValueError(f"File is both lossless and lossy: {file_path}")
+
+            if (
+                codec == file_extension_to_codec[TARGET_LOSSLESS_CODEC]
+                or codec == file_extension_to_codec[TARGET_LOSSY_CODEC]
+            ):
+                continue
+
+            if is_lossless:
+                new_path = file_path.with_suffix('.flac')
+                subprocess.run([
+                    'ffmpeg', '-i', str(file_path),
+                    '-c:a', 'flac',
+                    '-y',
+                    str(new_path)
+                ], check=True, capture_output=True)
+            else:
+                new_path = file_path.with_suffix('.opus')
+                subprocess.run([
+                    'ffmpeg', '-i', str(file_path),
+                    '-c:a', 'libopus',
+                    '-b:a', '192k',
+                    '-y',
+                    str(new_path)
+                ], check=True, capture_output=True)
+
+            if not new_path.exists():
+                raise RuntimeError(f"Transcoded file not created: {new_path}")
+
+            file_path.unlink()
+
+    def embed_release_cover_art(release_path: Path) -> None:
         """
         Ensure all tracks have embedded cover art from cover.jpg in release directory.
         Converts any cover.* file to cover.jpg if needed.
@@ -195,117 +248,47 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
             else:
                 raise ValueError(f"Cover image embedding encountered unexpected audio type: {type(audio)} for {file_path}")
 
+    def preprocess_release_metadata(release_path: Path) -> None:
+        """
+        Clean up metadata across a release.
+        """
+        for file_path in release_path.iterdir():
+            if not file_path.is_file() or not is_music_file(file_path):
+                continue
+
+            audio = mutagen.File(file_path)
+            if audio is None:
+                raise ValueError(f"Unable to open audio file: {file_path}")
+
+            if hasattr(audio, 'tags') and audio.tags:
+                for tag in audio.tags:
+                    if isinstance(tag, tuple):
+                        tag = tag[0]
+
+                    if tag.lower() == "comment":
+                        comment_value = audio.tags.get(tag)
+                        comment_text = comment_value[0] if isinstance(comment_value, list) else str(comment_value)
+
+                        if bandcamp_comment_pattern.search(comment_text):
+                            del audio.tags[tag]
+                            audio.save()
+
     def preprocess_release(release_path: Path) -> None:
         """
-        Release-level preprocessing: permissions, cover art embedding.
+        Release-level preprocessing: permissions, transcoding, cover art, metadata cleanup.
         """
         enforce_release_permissions(release_path)
-        embed_cover_art(release_path)
+        transcode_release(release_path)
+        embed_release_cover_art(release_path)
+        preprocess_release_metadata(release_path)
 
-    def transcode_track(track_path: Path) -> Path:
-        """
-        Transcode track to standard format:
-        - FLAC for lossless audio
-        - Opus 192k for lossy audio
-        Returns the (possibly updated) track path.
-        """
-        audio = mutagen.File(track_path)
-        if audio is None:
-            raise ValueError("Unable to open audio file")
-
-        codec = file_extension_to_codec.get(track_path.suffix.lower())
-        if codec is None:
-            raise ValueError(f"Unknown file extension: {track_path.suffix}")
-
-        is_lossless = codec in SUPPORTED_LOSSLESS_CODECS
-        is_lossy = codec in SUPPORTED_LOSSY_CODECS
-
-        if not is_lossless and not is_lossy:
-            raise ValueError(f"Unknown codec: {codec}")
-        elif is_lossless and is_lossy:
-            raise ValueError(f"Somehow received file that's both lossless and lossy: {track_path}")
-
-        if (
-            codec == file_extension_to_codec[TARGET_LOSSLESS_CODEC]
-            or codec == file_extension_to_codec[TARGET_LOSSY_CODEC]
-        ):
-            return track_path
-
-        if is_lossless:
-            new_path = track_path.with_suffix('.flac')
-            subprocess.run([
-                'ffmpeg', '-i', str(track_path),
-                '-c:a', 'flac',
-                '-y',
-                str(new_path)
-            ], check=True, capture_output=True)
-        else:
-            new_path = track_path.with_suffix('.opus')
-            subprocess.run([
-                'ffmpeg', '-i', str(track_path),
-                '-c:a', 'libopus',
-                '-b:a', '192k',
-                '-y',
-                str(new_path)
-            ], check=True, capture_output=True)
-
-        if not new_path.exists():
-            raise RuntimeError(f"Transcoded file not created: {new_path}")
-
-        track_path.unlink()
-
-        return new_path
-
-    def preprocess_track(track_path: Path) -> Path:
-        """
-        Preprocess a single track - check and set metadata.
-        - Removes bandcamp spam from comment fields
-        Returns the (possibly updated) track path.
-        """
-        track_path = transcode_track(track_path)
-
-        audio = mutagen.File(track_path)
-        if audio is None:
-            raise ValueError("Unable to open audio file")
-
-        # Clear out any "Visit us at bandcamp.com" comments
-        if hasattr(audio, 'tags') and audio.tags:
-            for tag in audio.tags:
-                # Each key can be a single string, or a (tag, value) tuple
-                if isinstance(tag, tuple):
-                    tag = tag[0]
-
-                if tag.lower() == "comment":
-                    comment_value = audio.tags.get(tag)
-                    comment_text = comment_value[0] if isinstance(comment_value, list) else str(comment_value)
-
-                    if bandcamp_comment_pattern.search(comment_text):
-                        del audio.tags[tag]
-                        audio.save()
-
-        return track_path
-
-    # Loop over and preprocess all tracks in the release, collecting errors as they arise
+    # Process each release
     for release_path in releases:
         try:
             preprocess_release(release_path)
+            successful_releases.append(Release(path=release_path))
         except Exception as e:
             failed_releases.append(FailedRelease(path=release_path, error=str(e)))
-            continue
-
-        track_errors = []
-        for file_path in release_path.iterdir():
-            if file_path.is_file() and is_music_file(file_path):
-                try:
-                    preprocess_track(file_path)
-                except Exception as e:
-                    track_errors.append(f"{file_path.name}: {str(e)}")
-
-        if track_errors:
-            error_message = "; ".join(track_errors)
-            failed_releases.append(FailedRelease(path=release_path, error=error_message))
-        else:
-            successful_releases.append(Release(path=release_path))
 
     return successful_releases, failed_releases
 
