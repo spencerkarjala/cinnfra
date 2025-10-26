@@ -15,6 +15,7 @@ COPY --chown=jobuser:jobuser ./ops/cron/import-music/uv.lock $JOB_DIR
 
 ENV PATH=$PATH:/home/jobuser/.local/bin/
 RUN pip install --no-cache-dir uv==0.9.5 \
-    && uv sync --frozen
+    && uv sync --frozen \
+    && ls -al .venv
 
-CMD [".venv/bin/python", "./import-music.py"]
+CMD ["uv", "run", "--no-sync", "./import-music.py"]
