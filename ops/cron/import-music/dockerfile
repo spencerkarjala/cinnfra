@@ -10,7 +10,8 @@ COPY --chown=jobuser:jobuser ./ops/cron/import-music/pyproject.toml $JOB_DIR
 COPY --chown=jobuser:jobuser ./ops/cron/import-music/uv.lock $JOB_DIR
 
 ENV PATH=$PATH:/home/jobuser/.local/bin/
-RUN pip install --no-cache-dir uv==0.9.5 \
+RUN apk add ffmpeg \
+    && pip install --no-cache-dir uv==0.9.5 \
     && uv sync --frozen
 
 CMD ["uv", "run", "./import-music.py"]
