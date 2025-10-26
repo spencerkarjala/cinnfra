@@ -1,0 +1,1 @@
+- Try to only comment things that add context. Don't use comments that are descriptive of the code; rather, create comments that include larger context about something. Say nothing if nothing needs to be said. Use descriptive variable and function names instead.
