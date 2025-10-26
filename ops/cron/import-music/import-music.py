@@ -1,11 +1,13 @@
-from pathlib import Path
-from dataclasses import dataclass
-from PIL import Image
+import base64
+import hashlib
 import mutagen
 import re
 import stat
 import subprocess
-import hashlib
+
+from dataclasses import dataclass
+from pathlib import Path
+from PIL import Image
 
 ROOT_MUSIC_DIR = Path("/music/todo/")
 
@@ -144,69 +146,46 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
             cover_path.unlink()
             cover_path = target_cover_path
 
-        # Read cover data
-        # with open(cover_path, 'rb') as f:
-        #     cover_data = f.read()
+        with open(cover_path, 'rb') as f:
+            cover_data = f.read()
 
-        # cover_hash = hashlib.sha256(cover_data).digest()
+        cover_hash = hashlib.sha256(cover_data).digest()
 
-        # # Check all music files
-        # for file_path in release_path.iterdir():
-        #     if not file_path.is_file() or not is_music_file(file_path):
-        #         continue
+        for file_path in release_path.iterdir():
+            if not file_path.is_file() or not is_music_file(file_path):
+                continue
 
-        #     audio = mutagen.File(file_path)
-        #     if audio is None:
-        #         continue
+            audio = mutagen.File(file_path)
+            if audio is None:
+                continue
 
-        #     # Get embedded artwork
-        #     embedded_data = None
+            embedded_data = None
 
-        #     # FLAC/Opus (Vorbis comments with Picture)
-        #     if hasattr(audio, 'pictures') and audio.pictures:
-        #         embedded_data = audio.pictures[0].data
-        #     # MP3 (ID3)
-        #     elif hasattr(audio, 'tags') and audio.tags:
-        #         for key in audio.tags:
-        #             if key.startswith('APIC'):
-        #                 embedded_data = audio.tags[key].data
-        #                 break
+            if hasattr(audio, 'pictures') and audio.pictures:
+                embedded_data = audio.pictures[0].data
 
-        #     # Check if embedded artwork matches cover file
-        #     if embedded_data:
-        #         embedded_hash = hashlib.sha256(embedded_data).digest()
-        #         if embedded_hash == cover_hash:
-        #             continue  # Already has correct cover
+            if embedded_data:
+                embedded_hash = hashlib.sha256(embedded_data).digest()
+                if embedded_hash == cover_hash:
+                    continue
 
-        #     # Need to embed cover art (always JPEG)
-        #     if isinstance(audio, mutagen.flac.FLAC):
-        #         from mutagen.flac import Picture
-        #         picture = Picture()
-        #         picture.type = 3
-        #         picture.mime = 'image/jpeg'
-        #         picture.data = cover_data
-        #         audio.clear_pictures()
-        #         audio.add_picture(picture)
-        #         audio.save()
-        #     elif isinstance(audio, mutagen.oggopus.OggOpus):
-        #         from mutagen.flac import Picture
-        #         import base64
-        #         picture = Picture()
-        #         picture.type = 3
-        #         picture.mime = 'image/jpeg'
-        #         picture.data = cover_data
-        #         audio['metadata_block_picture'] = [base64.b64encode(picture.write()).decode('ascii')]
-        #         audio.save()
-        #     elif isinstance(audio, mutagen.mp3.MP3):
-        #         from mutagen.id3 import APIC
-        #         audio.tags.add(APIC(
-        #             encoding=3,
-        #             mime='image/jpeg',
-        #             type=3,
-        #             desc='Cover',
-        #             data=cover_data
-        #         ))
-        #         audio.save()
+            print(f"  Embedding cover art into {file_path.name}")
+
+            # Both flac and opus use Vorbis comments for metadata, so they can both have cover art
+            # embedded with mutagen.flac.Picture
+            picture = mutagen.flac.Picture()
+            picture.type = 3
+            picture.mime = 'image/jpeg'
+            picture.data = cover_data
+            if isinstance(audio, mutagen.flac.FLAC):
+                audio.clear_pictures()
+                audio.add_picture(picture)
+                audio.save()
+            elif isinstance(audio, mutagen.oggopus.OggOpus):
+                audio['metadata_block_picture'] = [base64.b64encode(picture.write()).decode('ascii')]
+                audio.save()
+            else:
+                raise ValueError(f"Cover image embedding encountered unexpected audio type: {type(audio)} for {file_path}")
 
     def preprocess_release(release_path: Path) -> None:
         """
