@@ -1,5 +1,6 @@
 from pathlib import Path
 from dataclasses import dataclass
+from PIL import Image
 import mutagen
 import re
 import stat
@@ -129,7 +130,6 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
         # If not exactly "cover.jpg", re-encode to JPEG
         target_cover_path = release_path / 'cover.jpg'
         if cover_path.name != 'cover.jpg':
-            from PIL import Image
             img = Image.open(cover_path)
             # Convert to RGB if needed (e.g., for PNG with transparency)
             if img.mode in ('RGBA', 'LA', 'P'):
