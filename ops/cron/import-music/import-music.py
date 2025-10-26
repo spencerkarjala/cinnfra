@@ -164,7 +164,7 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
 
         track_path.unlink()
 
-        return track_path  # Return original path since we didn't actually transcode
+        return new_path
 
     def preprocess_track(track_path: Path) -> Path:
         """
@@ -172,10 +172,8 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
         - Removes bandcamp spam from comment fields
         Returns the (possibly updated) track path.
         """
-        # First, transcode to standard format if needed
         track_path = transcode_track(track_path)
 
-        # Load audio file for metadata processing
         audio = mutagen.File(track_path)
         if audio is None:
             raise ValueError("Unable to open audio file")
