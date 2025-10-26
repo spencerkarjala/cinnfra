@@ -136,15 +136,13 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                 rgb_img = Image.new('RGB', img.size, (255, 255, 255))
                 rgb_img.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
                 img = rgb_img
-            # img.save(target_cover_path, 'JPEG', quality=95)
-
-            print(f"would have saved {target_cover_path} and deleted {cover_path}")
+            img.save(target_cover_path, 'JPEG', quality=95)
 
             if not target_cover_path.exists():
                 raise RuntimeError(f"Failed to create {target_cover_path}")
 
-            # cover_path.unlink()
-            # cover_path = target_cover_path
+            cover_path.unlink()
+            cover_path = target_cover_path
 
         # Read cover data
         # with open(cover_path, 'rb') as f:
