@@ -17,4 +17,4 @@ ENV PATH=$PATH:/home/jobuser/.local/bin/
 RUN pip install --no-cache-dir uv==0.9.5 \
     && uv sync --frozen
 
-CMD ["uv", "run", "--no-sync", "./import-music.py"]
+CMD [".venv/bin/python", "./import-music.py"]
