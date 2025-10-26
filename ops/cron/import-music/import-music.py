@@ -4,6 +4,7 @@ import mutagen
 import re
 import stat
 import subprocess
+import hashlib
 
 ROOT_MUSIC_DIR = Path("/music/todo/")
 
@@ -81,11 +82,9 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
         except Exception:
             return False
 
-    def preprocess_release(release_path: Path) -> None:
+    def enforce_release_permissions(release_path: Path) -> None:
         """
-        Check release-level conformity for ownership and permissions.
-        1. Verify all files and directory are owned by 1000:1000
-        2. Enforce 755 permissions on all files and the release directory
+        Verify ownership is 1000:1000 and enforce 755 permissions on release directory and all files.
         """
         expected_uid = 1000
         expected_gid = 1000
@@ -111,6 +110,111 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
         for file_path in release_path.iterdir():
             if file_path.is_file():
                 file_path.chmod(expected_permissions)
+
+    def embed_cover_art(release_path: Path) -> None:
+        """
+        Ensure all tracks have embedded cover art from cover.jpg in release directory.
+        Converts any cover.* file to cover.jpg if needed.
+        """
+        # Find any file named "cover" (case-insensitive, any extension)
+        cover_path = None
+        for file_path in release_path.iterdir():
+            if file_path.is_file() and file_path.stem.lower() == 'cover':
+                cover_path = file_path
+                break
+
+        if cover_path is None:
+            raise FileNotFoundError("No cover image found")
+
+        # If not exactly "cover.jpg", re-encode to JPEG
+        target_cover_path = release_path / 'cover.jpg'
+        if cover_path.name != 'cover.jpg':
+            from PIL import Image
+            img = Image.open(cover_path)
+            # Convert to RGB if needed (e.g., for PNG with transparency)
+            if img.mode in ('RGBA', 'LA', 'P'):
+                rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+                rgb_img.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
+                img = rgb_img
+            # img.save(target_cover_path, 'JPEG', quality=95)
+
+            if not target_cover_path.exists():
+                raise RuntimeError(f"Failed to create {target_cover_path}")
+
+            print(f"would have saved {target_cover_path} and deleted {cover_path}")
+            # cover_path.unlink()
+            # cover_path = target_cover_path
+
+        # Read cover data
+        # with open(cover_path, 'rb') as f:
+        #     cover_data = f.read()
+
+        # cover_hash = hashlib.sha256(cover_data).digest()
+
+        # # Check all music files
+        # for file_path in release_path.iterdir():
+        #     if not file_path.is_file() or not is_music_file(file_path):
+        #         continue
+
+        #     audio = mutagen.File(file_path)
+        #     if audio is None:
+        #         continue
+
+        #     # Get embedded artwork
+        #     embedded_data = None
+
+        #     # FLAC/Opus (Vorbis comments with Picture)
+        #     if hasattr(audio, 'pictures') and audio.pictures:
+        #         embedded_data = audio.pictures[0].data
+        #     # MP3 (ID3)
+        #     elif hasattr(audio, 'tags') and audio.tags:
+        #         for key in audio.tags:
+        #             if key.startswith('APIC'):
+        #                 embedded_data = audio.tags[key].data
+        #                 break
+
+        #     # Check if embedded artwork matches cover file
+        #     if embedded_data:
+        #         embedded_hash = hashlib.sha256(embedded_data).digest()
+        #         if embedded_hash == cover_hash:
+        #             continue  # Already has correct cover
+
+        #     # Need to embed cover art (always JPEG)
+        #     if isinstance(audio, mutagen.flac.FLAC):
+        #         from mutagen.flac import Picture
+        #         picture = Picture()
+        #         picture.type = 3
+        #         picture.mime = 'image/jpeg'
+        #         picture.data = cover_data
+        #         audio.clear_pictures()
+        #         audio.add_picture(picture)
+        #         audio.save()
+        #     elif isinstance(audio, mutagen.oggopus.OggOpus):
+        #         from mutagen.flac import Picture
+        #         import base64
+        #         picture = Picture()
+        #         picture.type = 3
+        #         picture.mime = 'image/jpeg'
+        #         picture.data = cover_data
+        #         audio['metadata_block_picture'] = [base64.b64encode(picture.write()).decode('ascii')]
+        #         audio.save()
+        #     elif isinstance(audio, mutagen.mp3.MP3):
+        #         from mutagen.id3 import APIC
+        #         audio.tags.add(APIC(
+        #             encoding=3,
+        #             mime='image/jpeg',
+        #             type=3,
+        #             desc='Cover',
+        #             data=cover_data
+        #         ))
+        #         audio.save()
+
+    def preprocess_release(release_path: Path) -> None:
+        """
+        Release-level preprocessing: permissions, cover art embedding.
+        """
+        enforce_release_permissions(release_path)
+        embed_cover_art(release_path)
 
     def transcode_track(track_path: Path) -> Path:
         """
