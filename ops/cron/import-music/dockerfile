@@ -1,5 +1,9 @@
 FROM docker.io/library/python:alpine3.21
 
+RUN apk update \
+    && apk add ffmpeg \
+    && apk cache clean
+
 RUN adduser -D jobuser
 USER jobuser
 
@@ -10,8 +14,7 @@ COPY --chown=jobuser:jobuser ./ops/cron/import-music/pyproject.toml $JOB_DIR
 COPY --chown=jobuser:jobuser ./ops/cron/import-music/uv.lock $JOB_DIR
 
 ENV PATH=$PATH:/home/jobuser/.local/bin/
-RUN apk add ffmpeg \
-    && pip install --no-cache-dir uv==0.9.5 \
+RUN pip install --no-cache-dir uv==0.9.5 \
     && uv sync --frozen
 
 CMD ["uv", "run", "./import-music.py"]
