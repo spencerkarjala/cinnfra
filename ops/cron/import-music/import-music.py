@@ -143,29 +143,26 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
 
         if is_lossless:
             new_path = track_path.with_suffix('.flac')
-            print(f"  → Would transcode {track_path.name} to FLAC: {track_path} -> {new_path}")
-            # subprocess.run([
-            #     'ffmpeg', '-i', str(track_path),
-            #     '-c:a', 'flac',
-            #     '-y',
-            #     str(new_path)
-            # ], check=True, capture_output=True)
+            subprocess.run([
+                'ffmpeg', '-i', str(track_path),
+                '-c:a', 'flac',
+                '-y',
+                str(new_path)
+            ], check=True, capture_output=True)
         else:
             new_path = track_path.with_suffix('.opus')
-            print(f"  → Would transcode {track_path.name} to Opus 192k: {track_path} -> {new_path}")
-            # subprocess.run([
-            #     'ffmpeg', '-i', str(track_path),
-            #     '-c:a', 'libopus',
-            #     '-b:a', '192k',
-            #     '-y',
-            #     str(new_path)
-            # ], check=True, capture_output=True)
+            subprocess.run([
+                'ffmpeg', '-i', str(track_path),
+                '-c:a', 'libopus',
+                '-b:a', '192k',
+                '-y',
+                str(new_path)
+            ], check=True, capture_output=True)
 
-        # if not new_path.exists():
-        #     raise RuntimeError(f"Transcoded file not created: {new_path}")
+        if not new_path.exists():
+            raise RuntimeError(f"Transcoded file not created: {new_path}")
 
-        # track_path.unlink()
-        print(f"  → Would delete original: {track_path}")
+        track_path.unlink()
 
         return track_path  # Return original path since we didn't actually transcode
 
