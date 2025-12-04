@@ -2,12 +2,12 @@ import base64
 import hashlib
 import mutagen
 import re
-import stat
 import subprocess
 
 from dataclasses import dataclass
 from pathlib import Path
 from PIL import Image
+from typing import Optional
 
 ROOT_MUSIC_DIR = Path("/music/todo/")
 
@@ -66,6 +66,11 @@ class FailedRelease:
     path: Path
     error: str
 
+def is_music_file(file_path: Path) -> bool:
+    try:
+        return mutagen.File(file_path) is not None
+    except Exception:
+        return False
 
 def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[FailedRelease]]:
     """
@@ -79,12 +84,6 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
     failed_releases = []
 
     bandcamp_comment_pattern = re.compile(r"Visit https://.*\.bandcamp\.com", re.IGNORECASE)
-
-    def is_music_file(file_path: Path) -> bool:
-        try:
-            return mutagen.File(file_path) is not None
-        except Exception:
-            return False
 
     def enforce_release_permissions(release_path: Path) -> None:
         """
@@ -223,7 +222,8 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                 and len(audio['metadata_block_picture']) > 0
             ):
                 picture_data = base64.b64decode(audio['metadata_block_picture'][0])
-                picture = mutagen.flac.Picture(picture_data)
+                picture = mutagen.flac.Picture()
+                picture.from_data(picture_data)
                 embedded_data = picture.data
 
             if embedded_data:
@@ -261,18 +261,104 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
             if audio is None:
                 raise ValueError(f"Unable to open audio file: {file_path}")
 
-            if hasattr(audio, 'tags') and audio.tags:
-                for tag in audio.tags:
+            if hasattr(audio, "tags") and audio.tags:
+                for tag in list(audio.tags.keys()):
                     if isinstance(tag, tuple):
                         tag = tag[0]
 
-                    if tag.lower() == "comment":
+                    if str(tag).lower() == "comment":
                         comment_value = audio.tags.get(tag)
                         comment_text = comment_value[0] if isinstance(comment_value, list) else str(comment_value)
 
                         if bandcamp_comment_pattern.search(comment_text):
                             del audio.tags[tag]
                             audio.save()
+
+    def enforce_label_publisher_consistency(release_path: Path) -> None:
+        """
+        If any of label/publisher/tpub (case-insensitive) are set on any track in the release,
+        enforce that:
+        - all three lower-case keys ('label', 'publisher', 'tpub') exist on every track that has at least one defined, and
+        - they all have the same value for that track.
+        """
+        canonical_keys = ["label", "publisher", "tpub"]
+
+        # First pass: see if any of these tags exist at all in the release
+        any_present = False
+        for file_path in release_path.iterdir():
+            if not file_path.is_file() or not is_music_file(file_path):
+                continue
+            audio = mutagen.File(file_path)
+            if audio is None or not getattr(audio, "tags", None):
+                continue
+            tags = audio.tags
+            for key in list(tags.keys()):
+                key_str = str(key)
+                if key_str.lower() in canonical_keys:
+                    any_present = True
+                    break
+            if any_present:
+                break
+
+        if not any_present:
+            return
+
+        # Second pass: normalize keys and values on each track
+        for file_path in release_path.iterdir():
+            if not file_path.is_file() or not is_music_file(file_path):
+                continue
+
+            audio = mutagen.File(file_path)
+            if audio is None:
+                raise ValueError(f"Unable to open audio file: {file_path}")
+
+            if not hasattr(audio, "tags") or audio.tags is None:
+                raise ValueError(f"Missing tags on file while enforcing label/publisher consistency: {file_path}")
+
+            tags = audio.tags
+
+            # Collect any existing values for label/publisher/tpub (case-insensitive)
+            values: list[str] = []
+            keys_to_delete: list[str] = []
+
+            for key in list(tags.keys()):
+                key_str = str(key)
+                lower = key_str.lower()
+                if lower in canonical_keys:
+                    value = tags[key]
+                    if isinstance(value, (list, tuple)):
+                        if not value:
+                            continue
+                        value = value[0]
+                    value_str = str(value)
+                    if value_str:
+                        values.append(value_str)
+                    # We'll re-write under canonical lower-case keys
+                    keys_to_delete.append(key)
+
+            # Remove old variants (including non-lowercase)
+            for key in keys_to_delete:
+                if key in tags:
+                    del tags[key]
+
+            # Decide the canonical value for this track, if any
+            canonical_value = None
+            if values:
+                # Require that all existing values on this track match
+                first = values[0]
+                for v in values[1:]:
+                    if v != first:
+                        raise ValueError(
+                            f"Inconsistent label/publisher/tpub values in file {file_path}: {values}"
+                        )
+                canonical_value = first
+
+            # If we have a value, set all three canonical lower-case keys to that value
+            if canonical_value is not None:
+                for ck in canonical_keys:
+                    tags[ck] = canonical_value
+
+            audio.save()
 
     def preprocess_release(release_path: Path) -> None:
         """
@@ -282,6 +368,7 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
         transcode_release(release_path)
         embed_release_cover_art(release_path)
         preprocess_release_metadata(release_path)
+        enforce_label_publisher_consistency(release_path)
 
     for release_path in releases:
         try:
@@ -291,6 +378,95 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
             failed_releases.append(FailedRelease(path=release_path, error=str(e)))
 
     return successful_releases, failed_releases
+
+
+def validate_releases(releases: list[Release]) -> None:
+    def validate_release_labels(release_path: Path) -> None:
+        """
+        Enforce that any label-related tags are identical across the entire release.
+        """
+        canonical_keys = ["label", "publisher", "tpub"]
+        canonical_keys_lower = {k.lower() for k in canonical_keys}
+
+        # First, check if there are any label tags to validate
+        any_present = False
+        for file_path in release_path.iterdir():
+            if not file_path.is_file() or not is_music_file(file_path):
+                continue
+            audio = mutagen.File(file_path)
+            if audio is None or not getattr(audio, "tags", None):
+                continue
+            for key in audio.tags.keys():
+                if str(key).lower() in canonical_keys_lower:
+                    any_present = True
+                    break
+            if any_present:
+                break
+
+        if not any_present:
+            return
+
+        release_value: Optional[str] = None
+
+        for file_path in release_path.iterdir():
+            if not file_path.is_file() or not is_music_file(file_path):
+                continue
+
+            audio = mutagen.File(file_path)
+            if audio is None or not getattr(audio, "tags", None):
+                raise ValueError(f"Missing tags on file while validating label/publisher/tpub: {file_path}")
+
+            tags = audio.tags
+
+            # Force an error if any values are found that aren't all lower-case
+            for key in list(tags.keys()):
+                key_str = str(key)
+                if key_str.lower() in canonical_keys_lower and key_str not in canonical_keys:
+                    raise ValueError(
+                        f"Non-canonical label key {key_str!r} in {file_path}; "
+                        f"use lowercase {canonical_keys} only."
+                    )
+
+            # Collect the values for each label field on this track
+            stored_label_values: list[str] = []
+            for ck in canonical_keys:
+                if ck in tags:
+                    value = tags[ck]
+                    if isinstance(value, (list, tuple)):
+                        if not value:
+                            continue
+                        value = value[0]
+                    value_str = str(value).strip()
+                    if value_str:
+                        stored_label_values.append(value_str)
+
+            if not stored_label_values:
+                raise ValueError(
+                    f"File {file_path} has no label/publisher/tpub set, "
+                    f"but other files in the release do."
+                )
+
+            # Enforce all keys have the same value
+            first = stored_label_values[0]
+            for v in stored_label_values[1:]:
+                if v != first:
+                    raise ValueError(
+                        f"Inconsistent label tags in file {file_path}: {stored_label_values}"
+                    )
+
+            track_value = first
+
+            # Release-wide consistency (same value on every track)
+            if release_value is None:
+                release_value = track_value
+            elif release_value != track_value:
+                raise ValueError(
+                    f"Inconsistent label across release: file {file_path} has {track_value!r}, "
+                    f"expected {release_value!r}"
+                )
+
+    for release in releases:
+        validate_release_labels(release.path)
 
 
 def check_releases_ready(releases: list[Release]) -> list[Release]:
@@ -383,6 +559,8 @@ def main() -> None:
 
     print("failures:")
     print(preprocess_failures)
+
+    validate_releases(preprocessed_releases)
 
     # Step 2: Check which valid releases are marked as "done"
     ready_to_publish = check_releases_ready(preprocessed_releases)
