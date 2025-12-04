@@ -428,6 +428,26 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
 
 
 def validate_releases(releases: list[Release]) -> None:
+    def validate_all_tag_keys_lowercase(release_path: Path) -> None:
+        """
+        Ensure that all tag keys on all tracks in the release are lowercase.
+        """
+        for file_path in release_path.iterdir():
+            if not file_path.is_file() or not is_music_file(file_path):
+                continue
+
+            audio = mutagen.File(file_path)
+            if audio is None or not getattr(audio, "tags", None):
+                continue
+
+            for raw_key in audio.tags.keys():
+                key_str = _normalize_mutagen_tag_key(raw_key)
+                if key_str != key_str.lower():
+                    raise ValueError(
+                        f"Non-lowercase tag key {key_str!r} found in file {file_path}; "
+                        f"all tag keys must be lowercase."
+                    )
+
     def validate_release_labels(release_path: Path) -> None:
         """
         Enforce that any label-related tags are identical across the entire release.
@@ -513,6 +533,7 @@ def validate_releases(releases: list[Release]) -> None:
                 )
 
     for release in releases:
+        validate_all_tag_keys_lowercase(release.path)
         validate_release_labels(release.path)
 
 
