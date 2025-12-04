@@ -422,9 +422,10 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
             preprocess_release(release_path)
             successful_releases.append(Release(path=release_path))
         except Exception as e:
-            print(f"Error while preprocessing {release_path}: {e!r}")
-            traceback.print_exc()
-            failed_releases.append(FailedRelease(path=release_path, error=str(e)))
+            tb = traceback.format_exc()
+            error_text = f"{repr(e)}\n{tb}"
+            print(f"Error while preprocessing {release_path}:\n{error_text}")
+            failed_releases.append(FailedRelease(path=release_path, error=error_text))
 
     return successful_releases, failed_releases
 
