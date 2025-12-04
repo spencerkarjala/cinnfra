@@ -3,6 +3,7 @@ import hashlib
 import mutagen
 import re
 import subprocess
+import traceback
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -233,8 +234,7 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                 and len(audio['metadata_block_picture']) > 0
             ):
                 picture_data = base64.b64decode(audio['metadata_block_picture'][0])
-                picture = mutagen.flac.Picture()
-                picture.from_data(picture_data)
+                picture = mutagen.flac.Picture(raw_block)
                 embedded_data = picture.data
 
             if embedded_data:
@@ -422,6 +422,8 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
             preprocess_release(release_path)
             successful_releases.append(Release(path=release_path))
         except Exception as e:
+            print(f"Error while preprocessing {release_path}: {e!r}")
+            traceback.print_exc()
             failed_releases.append(FailedRelease(path=release_path, error=str(e)))
 
     return successful_releases, failed_releases
@@ -553,6 +555,9 @@ def check_releases_ready(releases: list[Release]) -> list[Release]:
 
         tags = audio.tags
         truthy_values = {"1", "true", "yes", "y"}
+
+        if "DONE" not in tags:
+            return False
 
         value = tags["DONE"]
         if isinstance(value, (list, tuple)):
