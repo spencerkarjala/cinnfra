@@ -88,11 +88,11 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
 
     def enforce_release_permissions(release_path: Path) -> None:
         """
-        Verify ownership is 1000:1000 and enforce 644 permissions on release directory and all files.
+        Verify ownership is 1000:1000 and enforce 755 permissions on release directory and all files.
         """
         expected_uid = 1000
         expected_gid = 1000
-        expected_permissions = 0o644
+        expected_permissions = 0o755
 
         dir_stat = release_path.stat()
         if dir_stat.st_uid != expected_uid or dir_stat.st_gid != expected_gid:
