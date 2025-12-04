@@ -30,6 +30,14 @@ file_extension_to_codec = {
     '.wma': 'WMA',
 }
 
+def _normalize_mutagen_tag_key(raw_key: Any) -> str:
+    """
+    Sometimes, mutagen keys are not simply strings. This function normalizes them.
+    """
+    if isinstance(raw_key, tuple):
+        raw_key = raw_key[0]
+    return str(raw_key)
+
 
 def identify_release_directories(root_dir: Path) -> list[Path]:
     """
@@ -261,18 +269,19 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
             if audio is None:
                 raise ValueError(f"Unable to open audio file: {file_path}")
 
-            if hasattr(audio, "tags") and audio.tags:
-                for tag in list(audio.tags.keys()):
-                    if isinstance(tag, tuple):
-                        tag = tag[0]
+            if not hasattr(audio, "tags") or not audio.tags:
+                continue
 
-                    if str(tag).lower() == "comment":
-                        comment_value = audio.tags.get(tag)
-                        comment_text = comment_value[0] if isinstance(comment_value, list) else str(comment_value)
+            for tag in list(audio.tags.keys()):
+                tag_str = _normalize_mutagen_tag_key(tag)
 
-                        if bandcamp_comment_pattern.search(comment_text):
-                            del audio.tags[tag]
-                            audio.save()
+                if str(tag_str).lower() == "comment":
+                    comment_value = audio.tags.get(tag_str)
+                    comment_text = comment_value[0] if isinstance(comment_value, list) else str(comment_value)
+
+                    if bandcamp_comment_pattern.search(comment_text):
+                        del audio.tags[tag_str]
+                        audio.save()
 
     def enforce_label_publisher_consistency(release_path: Path) -> None:
         """
@@ -291,10 +300,9 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
             audio = mutagen.File(file_path)
             if audio is None or not getattr(audio, "tags", None):
                 continue
-            tags = audio.tags
-            for key in list(tags.keys()):
-                key_str = str(key)
-                if key_str.lower() in canonical_keys:
+            for key in list(audio.tags.keys()):
+                tag_str = _normalize_mutagen_tag_key(key)
+                if tag_str.lower() in canonical_keys:
                     any_present = True
                     break
             if any_present:
@@ -321,11 +329,11 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
             values: list[str] = []
             keys_to_delete: list[str] = []
 
-            for key in list(tags.keys()):
-                key_str = str(key)
-                lower = key_str.lower()
+            for tag in list(audio.tags.keys()):
+                tag_str = _normalize_mutagen_tag_key(tag)
+                lower = tag_str.lower()
                 if lower in canonical_keys:
-                    value = tags[key]
+                    value = audio.tags[tag_str]
                     if isinstance(value, (list, tuple)):
                         if not value:
                             continue
@@ -334,12 +342,12 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                     if value_str:
                         values.append(value_str)
                     # We'll re-write under canonical lower-case keys
-                    keys_to_delete.append(key)
+                    keys_to_delete.append(tag_str)
 
             # Remove old variants (including non-lowercase)
             for key in keys_to_delete:
-                if key in tags:
-                    del tags[key]
+                if key in audio.tags:
+                    del audio.tags[key]
 
             # Decide the canonical value for this track, if any
             canonical_value = None
@@ -397,7 +405,7 @@ def validate_releases(releases: list[Release]) -> None:
             if audio is None or not getattr(audio, "tags", None):
                 continue
             for key in audio.tags.keys():
-                if str(key).lower() in canonical_keys_lower:
+                if _normalize_mutagen_tag_key(key).lower() in canonical_keys_lower:
                     any_present = True
                     break
             if any_present:
