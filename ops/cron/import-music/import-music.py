@@ -30,6 +30,7 @@ file_extension_to_codec = {
     '.wma': 'WMA',
 }
 
+
 def identify_release_directories(root_dir: Path) -> list[Path]:
     """
     Returns the list of all release directories recursively under the provided `root_dir`. That is,
@@ -87,11 +88,11 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
 
     def enforce_release_permissions(release_path: Path) -> None:
         """
-        Verify ownership is 1000:1000 and enforce 755 permissions on release directory and all files.
+        Verify ownership is 1000:1000 and enforce 644 permissions on release directory and all files.
         """
         expected_uid = 1000
         expected_gid = 1000
-        expected_permissions = 0o755
+        expected_permissions = 0o644
 
         dir_stat = release_path.stat()
         if dir_stat.st_uid != expected_uid or dir_stat.st_gid != expected_gid:
@@ -292,31 +293,61 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
     return successful_releases, failed_releases
 
 
-def validate_releases(releases: list[Release]) -> tuple[list[Release], list[FailedRelease]]:
-    """
-    Validates each release by checking every track.
-    Checks things like:
-    - Can we open the file?
-    - Is it a valid WAV/FLAC/etc?
-    - Does it have required metadata fields?
-    - Other validation rules we'll add later
-
-    Returns:
-    - valid_releases: list of Release objects that passed validation
-    - failed_releases: list of FailedRelease objects with error info
-    """
-    pass
-
-
 def check_releases_ready(releases: list[Release]) -> list[Release]:
     """
     Check if releases are marked as "done" and ready to publish.
     For each release, checks that every track has a "done" metadata field
-    set to "1" or "true" (or similar truthy value).
+    set to a truthy value ("1", "true", "yes", "y", case-insensitive).
 
     Returns list of Release objects that are ready to publish.
     """
-    pass
+    ready_releases: list[Release] = []
+
+    def is_track_done(audio: mutagen.FileType) -> bool:
+        if not hasattr(audio, "tags") or audio.tags is None:
+            return False
+
+        tags = audio.tags
+        truthy_values = {"1", "true", "yes", "y"}
+        possible_keys = ["done", "DONE", "Done"]
+
+        for key in possible_keys:
+            if key in tags:
+                value = tags[key]
+                # Mutagen often returns list-like values.
+                if isinstance(value, (list, tuple)):
+                    if not value:
+                        continue
+                    value = value[0]
+                value_str = str(value).strip().lower()
+                if value_str in truthy_values:
+                    return True
+
+        return False
+
+    for release in releases:
+        all_done = True
+
+        for file_path in release.path.iterdir():
+            if not file_path.is_file():
+                continue
+
+            try:
+                audio = mutagen.File(file_path)
+            except Exception:
+                audio = None
+
+            if audio is None:
+                continue
+
+            if not is_track_done(audio):
+                all_done = False
+                break
+
+        if all_done:
+            ready_releases.append(release)
+
+    return ready_releases
 
 
 def publish_releases(releases: list[Release], library_path: Path) -> tuple[list[Release], list[FailedRelease]]:
@@ -343,25 +374,17 @@ def main() -> None:
     # Step 1: Preprocess to catch annoying issues
     preprocessed_releases, preprocess_failures = preprocess_releases(releases_to_validate)
 
+    print("failures:")
     print(preprocess_failures)
 
-    # Step 2: Validate releases
-    # validated_releases, validation_failures = validate_releases(preprocessed_releases)
+    # Step 2: Check which valid releases are marked as "done"
+    ready_to_publish = check_releases_ready(validated_releases)
+    print("ready releases:")
+    print(ready_to_publish)
 
-    # Step 3: Check which valid releases are marked as "done"
-    # ready_to_publish = check_releases_ready(validated_releases)
-
-    # Step 4: Publish releases to library
+    # Step 3: Publish releases to library
     # published, publish_failures = publish_releases(ready_to_publish, LIBRARY_PATH)
 
-    # TODO: Log/report results
-    # - How many preprocessed
-    # - How many passed validation
-    # - Preprocess failures and why
-    # - Validation failures and why
-    # - How many ready to publish
-    # - Successfully published
-    # - Publish failures and why
 
 if __name__ == "__main__":
     main()
