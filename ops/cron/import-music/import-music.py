@@ -378,7 +378,7 @@ def main() -> None:
     print(preprocess_failures)
 
     # Step 2: Check which valid releases are marked as "done"
-    ready_to_publish = check_releases_ready(validated_releases)
+    ready_to_publish = check_releases_ready(preprocessed_releases)
     print("ready releases:")
     print(ready_to_publish)
 
