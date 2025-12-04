@@ -619,8 +619,10 @@ def main() -> None:
     # Step 1: Preprocess to catch annoying issues
     preprocessed_releases, preprocess_failures = preprocess_releases(releases_to_validate)
 
-    print("failures:")
-    print(preprocess_failures)
+    if preprocess_failures:
+        print("failures:")
+        for failure in preprocess_failures:
+            print(f"    {failure}")
 
     validate_releases(preprocessed_releases)
 
