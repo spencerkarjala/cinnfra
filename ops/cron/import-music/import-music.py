@@ -279,21 +279,26 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                 tag_str = _normalize_mutagen_tag_key(tag)
 
                 if tag_str.lower() == "comment":
-                    comment_value = audio.tags.get(tag_str)
-                    comment_text = comment_value[0] if isinstance(comment_value, list) else str(comment_value)
+                    comment_value = audio.tags.get(tag)
+                    if comment_value == None:
+                        comment_text = ""
+                    elif isinstance(comment_value, list):
+                        comment_text = comment_value[0]
+                    else:
+                        comment_text = str(comment_value)
 
                     if bandcamp_comment_pattern.search(comment_text):
-                        del audio.tags[tag_str]
+                        del audio.tags[tag]
                         audio.save()
 
     def enforce_label_publisher_consistency(release_path: Path) -> None:
         """
         If any of label/publisher/tpub (case-insensitive) are set on any track in the release,
         enforce that:
-        - all three lower-case keys ('label', 'publisher', 'tpub') exist on every track that has at least one defined, and
+        - all three upper-case keys ('LABEL', 'PUBLISHER', 'TPUB') exist on every track that has at least one defined, and
         - they all have the same value for that track.
         """
-        canonical_keys = ["label", "publisher", "tpub"]
+        canonical_keys = ["LABEL", "PUBLISHER", "TPUB"]
 
         # First pass: see if any of these tags exist at all in the release
         any_present = False
@@ -305,7 +310,7 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                 continue
             for key in list(audio.tags.keys()):
                 tag_str = _normalize_mutagen_tag_key(key)
-                if tag_str.lower() in canonical_keys:
+                if tag_str.upper() in canonical_keys:
                     any_present = True
                     break
             if any_present:
@@ -334,9 +339,9 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
 
             for tag in list(audio.tags.keys()):
                 tag_str = _normalize_mutagen_tag_key(tag)
-                lower = tag_str.lower()
-                if lower in canonical_keys:
-                    value = audio.tags[tag_str]
+                upper = tag_str.upper()
+                if upper in canonical_keys:
+                    value = audio.tags[tag]
                     if isinstance(value, (list, tuple)):
                         if not value:
                             continue
@@ -344,10 +349,10 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                     value_str = str(value)
                     if value_str:
                         values.append(value_str)
-                    # We'll re-write under canonical lower-case keys
-                    keys_to_delete.append(tag_str)
+                    # We'll re-write under canonical upper-case keys
+                    keys_to_delete.append(tag)
 
-            # Remove old variants (including non-lowercase)
+            # Remove old variants (including non-uppercase)
             for key in keys_to_delete:
                 if key in audio.tags:
                     del audio.tags[key]
@@ -364,45 +369,40 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                         )
                 canonical_value = first
 
-            # If we have a value, set all three canonical lower-case keys to that value
+            # If we have a value, set all three canonical upper-case keys to that value
             if canonical_value is not None:
                 for ck in canonical_keys:
                     tags[ck] = canonical_value
 
             audio.save()
 
-    def normalize_all_tag_keys_to_lowercase(release_path: Path) -> None:
+    def normalize_all_tag_keys_to_uppercase(release_path: Path) -> None:
         """
-        For every track in the release, convert all tag keys to lowercase.
+        For every track in the release, convert all tag keys to uppercase.
 
-        If a lowercase key already exists and we are lowering another variant of it,
-        we keep the existing lowercase key's value and drop the non-lowercase one.
+        If a uppercase key already exists and we are raising another variant of it,
+        we keep the existing uppercase key's value and drop the non-uppercase one.
         """
         for file_path in release_path.iterdir():
             if not file_path.is_file() or not is_music_file(file_path):
                 continue
-
             audio = mutagen.File(file_path)
             if audio is None or not getattr(audio, "tags", None):
                 continue
 
             tags = audio.tags
-            tags_copy = list(tags.keys())
-            for raw_tag in tags_copy:
-                tag_str = _normalize_mutagen_tag_key(raw_tag)
-                tag_str_lowered = tag_str.lower()
+            original_tags = list(tags.keys())
 
-                if tag_str == tag_str_lowered:
+            for raw_tag in original_tags:
+                key_str = _normalize_mutagen_tag_key(raw_tag)
+                upper = key_str.upper()
+                if key_str == upper:
                     continue
 
-                if tag_str_lowered in tags:
-                    if tag_str in tags:
-                        del tags[tag_str]
+                value = tags.pop(raw_tag)
+                if upper in tags:
                     continue
-
-                value = tags[tag_str]
-                tags[tag_str_lowered] = value
-                del tags[tag_str]
+                tags[upper] = value
 
             audio.save()
 
@@ -415,7 +415,7 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
         embed_release_cover_art(release_path)
         preprocess_release_metadata(release_path)
         enforce_label_publisher_consistency(release_path)
-        normalize_all_tag_keys_to_lowercase(release_path)
+        normalize_all_tag_keys_to_uppercase(release_path)
 
     for release_path in releases:
         try:
@@ -428,9 +428,9 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
 
 
 def validate_releases(releases: list[Release]) -> None:
-    def validate_all_tag_keys_lowercase(release_path: Path) -> None:
+    def validate_all_tag_keys_uppercase(release_path: Path) -> None:
         """
-        Ensure that all tag keys on all tracks in the release are lowercase.
+        Ensure that all tag keys on all tracks in the release are uppercase.
         """
         for file_path in release_path.iterdir():
             if not file_path.is_file() or not is_music_file(file_path):
@@ -442,18 +442,18 @@ def validate_releases(releases: list[Release]) -> None:
 
             for raw_key in audio.tags.keys():
                 key_str = _normalize_mutagen_tag_key(raw_key)
-                if key_str != key_str.lower():
+                if key_str != key_str.upper():
                     raise ValueError(
-                        f"Non-lowercase tag key {key_str!r} found in file {file_path}; "
-                        f"all tag keys must be lowercase."
+                        f"Non-uppercase tag key {key_str!r} found in file {file_path}; "
+                        f"all tag keys must be uppercase."
                     )
 
     def validate_release_labels(release_path: Path) -> None:
         """
         Enforce that any label-related tags are identical across the entire release.
         """
-        canonical_keys = ["label", "publisher", "tpub"]
-        canonical_keys_lower = {k.lower() for k in canonical_keys}
+        canonical_keys = ["LABEL", "PUBLISHER", "TPUB"]
+        canonical_keys_upper = {k.upper() for k in canonical_keys}
 
         # First, check if there are any label tags to validate
         any_present = False
@@ -464,7 +464,7 @@ def validate_releases(releases: list[Release]) -> None:
             if audio is None or not getattr(audio, "tags", None):
                 continue
             for key in audio.tags.keys():
-                if _normalize_mutagen_tag_key(key).lower() in canonical_keys_lower:
+                if _normalize_mutagen_tag_key(key).upper() in canonical_keys_upper:
                     any_present = True
                     break
             if any_present:
@@ -485,13 +485,13 @@ def validate_releases(releases: list[Release]) -> None:
 
             tags = audio.tags
 
-            # Force an error if any values are found that aren't all lower-case
+            # Force an error if any values are found that aren't all upper-case
             for key in list(tags.keys()):
                 key_str = _normalize_mutagen_tag_key(key)
-                if key_str.lower() in canonical_keys_lower and key_str not in canonical_keys:
+                if key_str.upper() in canonical_keys_upper and key_str not in canonical_keys:
                     raise ValueError(
                         f"Non-canonical label key {key_str!r} in {file_path}; "
-                        f"use lowercase {canonical_keys} only."
+                        f"use uppercase {canonical_keys} only."
                     )
 
             # Collect the values for each label field on this track
@@ -533,7 +533,7 @@ def validate_releases(releases: list[Release]) -> None:
                 )
 
     for release in releases:
-        validate_all_tag_keys_lowercase(release.path)
+        validate_all_tag_keys_uppercase(release.path)
         validate_release_labels(release.path)
 
 
@@ -553,21 +553,15 @@ def check_releases_ready(releases: list[Release]) -> list[Release]:
 
         tags = audio.tags
         truthy_values = {"1", "true", "yes", "y"}
-        possible_keys = ["done", "DONE", "Done"]
 
-        for key in possible_keys:
-            if key in tags:
-                value = tags[key]
-                # Mutagen often returns list-like values.
-                if isinstance(value, (list, tuple)):
-                    if not value:
-                        continue
-                    value = value[0]
-                value_str = str(value).strip().lower()
-                if value_str in truthy_values:
-                    return True
-
-        return False
+        value = tags["DONE"]
+        if isinstance(value, (list, tuple)):
+            if not value:
+                return False;
+            value = value[0]
+        
+        value_str = str(value).strip().lower()
+        return value_str in truthy_values
 
     for release in releases:
         all_done = True
