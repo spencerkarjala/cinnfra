@@ -344,8 +344,14 @@ def check_releases_ready(releases: list[Release]) -> list[Release]:
                 all_done = False
                 break
 
+            at_least_one_done = True
+            print(f"Found a file marked 'done': {file_path}")
+
         if all_done:
+            print(f"Including release in releases to publish: {release.path}")
             ready_releases.append(release)
+        elif at_least_one_done:
+            print(f"Found a partially-done release: {release.path}")
 
     return ready_releases
 
