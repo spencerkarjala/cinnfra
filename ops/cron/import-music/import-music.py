@@ -7,7 +7,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from PIL import Image
-from typing import Optional
+from typing import Any, Optional
 
 ROOT_MUSIC_DIR = Path("/music/todo/")
 
@@ -29,6 +29,7 @@ file_extension_to_codec = {
     '.mp4': 'AAC',
     '.wma': 'WMA',
 }
+
 
 def _normalize_mutagen_tag_key(raw_key: Any) -> str:
     """
@@ -74,11 +75,13 @@ class FailedRelease:
     path: Path
     error: str
 
+
 def is_music_file(file_path: Path) -> bool:
     try:
         return mutagen.File(file_path) is not None
     except Exception:
         return False
+
 
 def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[FailedRelease]]:
     """
@@ -275,7 +278,7 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
             for tag in list(audio.tags.keys()):
                 tag_str = _normalize_mutagen_tag_key(tag)
 
-                if str(tag_str).lower() == "comment":
+                if tag_str.lower() == "comment":
                     comment_value = audio.tags.get(tag_str)
                     comment_text = comment_value[0] if isinstance(comment_value, list) else str(comment_value)
 
@@ -368,6 +371,41 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
 
             audio.save()
 
+    def normalize_all_tag_keys_to_lowercase(release_path: Path) -> None:
+        """
+        For every track in the release, convert all tag keys to lowercase.
+
+        If a lowercase key already exists and we are lowering another variant of it,
+        we keep the existing lowercase key's value and drop the non-lowercase one.
+        """
+        for file_path in release_path.iterdir():
+            if not file_path.is_file() or not is_music_file(file_path):
+                continue
+
+            audio = mutagen.File(file_path)
+            if audio is None or not getattr(audio, "tags", None):
+                continue
+
+            tags = audio.tags
+            tags_copy = list(tags.keys())
+            for raw_tag in tags_copy:
+                tag_str = _normalize_mutagen_tag_key(raw_tag)
+                tag_str_lowered = tag_str.lower()
+
+                if tag_str == tag_str_lowered:
+                    continue
+
+                if tag_str_lowered in tags:
+                    if tag_str in tags:
+                        del tags[tag_str]
+                    continue
+
+                value = tags[tag_str]
+                tags[tag_str_lowered] = value
+                del tags[tag_str]
+
+            audio.save()
+
     def preprocess_release(release_path: Path) -> None:
         """
         Release-level preprocessing: permissions, transcoding, cover art, metadata cleanup.
@@ -377,6 +415,7 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
         embed_release_cover_art(release_path)
         preprocess_release_metadata(release_path)
         enforce_label_publisher_consistency(release_path)
+        normalize_all_tag_keys_to_lowercase(release_path)
 
     for release_path in releases:
         try:
@@ -428,7 +467,7 @@ def validate_releases(releases: list[Release]) -> None:
 
             # Force an error if any values are found that aren't all lower-case
             for key in list(tags.keys()):
-                key_str = str(key)
+                key_str = _normalize_mutagen_tag_key(key)
                 if key_str.lower() in canonical_keys_lower and key_str not in canonical_keys:
                     raise ValueError(
                         f"Non-canonical label key {key_str!r} in {file_path}; "
