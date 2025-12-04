@@ -327,6 +327,7 @@ def check_releases_ready(releases: list[Release]) -> list[Release]:
 
     for release in releases:
         all_done = True
+        at_least_one_done = False
 
         for file_path in release.path.iterdir():
             if not file_path.is_file():
