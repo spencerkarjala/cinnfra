@@ -321,38 +321,33 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                 if isinstance(date_value, (list, tuple)):
                     date_value = date_value[0] if date_value else None
 
-                if not date_value:
-                    continue
+                if date_value:
+                    date_str = str(date_value).strip()
 
-                date_str = str(date_value).strip()
+                    # Normalize to ISO format if not already valid
+                    if not date_pattern.match(date_str):
+                        try:
+                            parsed_date = dateparser.parse(date_str)
+                            if not parsed_date:
+                                raise ValueError(f"Could not parse date: '{date_str}'")
 
-                # Skip if already in valid format
-                if date_pattern.match(date_str):
-                    continue
+                            iso_date = parsed_date.date().isoformat()
 
-                # Normalize to ISO format
-                try:
-                    parsed_date = dateparser.parse(date_str)
-                    if not parsed_date:
-                        raise ValueError(f"Could not parse date: '{date_str}'")
+                            # Preserve precision from original
+                            if re.match(r'^\d{4}$', date_str):
+                                normalized = iso_date[:4]
+                            elif re.match(r'^\d{4}[/-]\d{1,2}$', date_str) or re.match(r'^\d{6}$', date_str):
+                                normalized = iso_date[:7]
+                            else:
+                                normalized = iso_date
 
-                    iso_date = parsed_date.date().isoformat()
-
-                    # Preserve precision from original
-                    if re.match(r'^\d{4}$', date_str):
-                        normalized = iso_date[:4]
-                    elif re.match(r'^\d{4}[/-]\d{1,2}$', date_str) or re.match(r'^\d{6}$', date_str):
-                        normalized = iso_date[:7]
-                    else:
-                        normalized = iso_date
-
-                    tags["date"] = normalized
-                    modified = True
-                except Exception as e:
-                    raise ValueError(
-                        f"Cannot normalize date format in {file_path}: '{date_str}'\n"
-                        f"Error: {e}"
-                    )
+                            tags["date"] = normalized
+                            modified = True
+                        except Exception as e:
+                            raise ValueError(
+                                f"Cannot normalize date format in {file_path}: '{date_str}'\n"
+                                f"Error: {e}"
+                            )
 
             # Check if year already exists
             if "year" in tags and tags["year"]:
