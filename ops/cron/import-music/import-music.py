@@ -7,6 +7,7 @@ import subprocess
 import traceback
 
 from dataclasses import dataclass
+from dateutil import parser as dateparser
 from pathlib import Path
 from PIL import Image
 from typing import Any, Optional
@@ -296,7 +297,10 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
     def enforce_year_tag(release_path: Path) -> None:
         """
         Ensure every track has a year tag. If date exists but year doesn't, extract year from date.
+        Also normalizes date format to YYYY, YYYY-MM, or YYYY-MM-DD.
         """
+        date_pattern = re.compile(r'^\d{4}(-\d{2}(-\d{2})?)?$')
+
         for file_path in release_path.iterdir():
             if not file_path.is_file() or not is_music_file(file_path):
                 continue
@@ -309,31 +313,81 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                 raise ValueError(f"Missing tags on file while enforcing year tag: {file_path}")
 
             tags = audio.tags
+            modified = False
 
-            # If year already exists, we're good
-            if "year" in tags and tags["year"]:
-                value = tags["year"]
-                if isinstance(value, (list, tuple)):
-                    if value and str(value[0]).strip():
-                        continue
-                elif str(value).strip():
-                    continue
-
-            # Try to extract from date
+            # Normalize date format if present
             if "date" in tags and tags["date"]:
                 date_value = tags["date"]
                 if isinstance(date_value, (list, tuple)):
                     date_value = date_value[0] if date_value else None
-                if date_value:
-                    date_str = str(date_value).strip()
-                    # Extract first 4 digits (year)
-                    year_match = re.match(r'^(\d{4})', date_str)
-                    if year_match:
-                        tags["year"] = year_match.group(1)
-                        audio.save()
-                        continue
 
-            raise ValueError(f"Missing year tag and unable to extract from date in {file_path}")
+                if not date_value:
+                    continue
+
+                date_str = str(date_value).strip()
+
+                # Skip if already in valid format
+                if date_pattern.match(date_str):
+                    continue
+
+                # Normalize to ISO format
+                try:
+                    parsed_date = dateparser.parse(date_str)
+                    if not parsed_date:
+                        raise ValueError(f"Could not parse date: '{date_str}'")
+
+                    iso_date = parsed_date.date().isoformat()
+
+                    # Preserve precision from original
+                    if re.match(r'^\d{4}$', date_str):
+                        normalized = iso_date[:4]
+                    elif re.match(r'^\d{4}[/-]\d{1,2}$', date_str) or re.match(r'^\d{6}$', date_str):
+                        normalized = iso_date[:7]
+                    else:
+                        normalized = iso_date
+
+                    tags["date"] = normalized
+                    modified = True
+                except Exception as e:
+                    raise ValueError(
+                        f"Cannot normalize date format in {file_path}: '{date_str}'\n"
+                        f"Error: {e}"
+                    )
+
+            # Check if year already exists
+            if "year" in tags and tags["year"]:
+                value = tags["year"]
+                if isinstance(value, (list, tuple)):
+                    value = value[0] if value else None
+                if value and str(value).strip():
+                    if modified:
+                        audio.save()
+                    continue
+
+            # Extract year from date
+            if not ("date" in tags and tags["date"]):
+                raise ValueError(f"Missing year tag and no date to extract from in {file_path}")
+
+            date_value = tags["date"]
+            if isinstance(date_value, (list, tuple)):
+                date_value = date_value[0] if date_value else None
+
+            if not date_value:
+                raise ValueError(f"Missing year tag and empty date in {file_path}")
+
+            date_str = str(date_value).strip()
+            try:
+                parsed_date = dateparser.parse(date_str)
+                if not parsed_date:
+                    raise ValueError(f"Could not extract year from date in {file_path}")
+
+                tags["year"] = str(parsed_date.year)
+                modified = True
+            except Exception:
+                raise ValueError(f"Missing year tag and unable to extract from date in {file_path}")
+
+            if modified:
+                audio.save()
 
     def enforce_label_publisher_consistency(release_path: Path) -> None:
         """
@@ -497,9 +551,11 @@ def validate_releases(releases: list[Release]) -> tuple[list[Release], list[Fail
         """
         Ensure all tracks have required tags for file naming:
         albumartist, year, album, tracknumber, artist, title
-        Also ensure cover.jpg exists.
+        Also ensure cover.jpg exists and validate date format.
         """
         required_tags = ["albumartist", "year", "album", "tracknumber", "artist", "title"]
+
+        date_pattern = re.compile(r'^\d{4}(-\d{2}(-\d{2})?)?$')
 
         for file_path in release_path.iterdir():
             if not file_path.is_file() or not is_music_file(file_path):
@@ -527,6 +583,18 @@ def validate_releases(releases: list[Release]) -> tuple[list[Release], list[Fail
                 raise ValueError(
                     f"Missing required tags in {file_path}: {', '.join(missing_tags)}"
                 )
+
+            # Validate date format if present
+            if "date" in tags:
+                date_value = tags["date"]
+                if isinstance(date_value, (list, tuple)):
+                    date_value = date_value[0] if date_value else ""
+                date_str = str(date_value).strip()
+                if date_str and not date_pattern.match(date_str):
+                    raise ValueError(
+                        f"Invalid date format in {file_path}: '{date_str}'\n"
+                        f"Date must be in format YYYY, YYYY-MM, or YYYY-MM-DD"
+                    )
 
         # Ensure cover.jpg exists
         cover_path = release_path / "cover.jpg"
