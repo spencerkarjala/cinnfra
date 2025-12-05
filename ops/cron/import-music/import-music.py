@@ -293,7 +293,7 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
 
     def enforce_year_tag(release_path: Path) -> None:
         """
-        Ensure every track has a YEAR tag. If DATE exists but YEAR doesn't, extract year from DATE.
+        Ensure every track has a year tag. If date exists but year doesn't, extract year from date.
         """
         for file_path in release_path.iterdir():
             if not file_path.is_file() or not is_music_file(file_path):
@@ -304,44 +304,41 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                 raise ValueError(f"Unable to open audio file: {file_path}")
 
             if not hasattr(audio, "tags") or audio.tags is None:
-                raise ValueError(f"Missing tags on file while enforcing YEAR tag: {file_path}")
+                raise ValueError(f"Missing tags on file while enforcing year tag: {file_path}")
 
             tags = audio.tags
 
-            # If YEAR already exists, we're good
-            if "YEAR" in tags and tags["YEAR"]:
-                value = tags["YEAR"]
+            # If year already exists, we're good
+            if "year" in tags and tags["year"]:
+                value = tags["year"]
                 if isinstance(value, (list, tuple)):
                     if value and str(value[0]).strip():
                         continue
                 elif str(value).strip():
                     continue
 
-            # Try to extract from DATE
-            if "DATE" in tags and tags["DATE"]:
-                date_value = tags["DATE"]
+            # Try to extract from date
+            if "date" in tags and tags["date"]:
+                date_value = tags["date"]
                 if isinstance(date_value, (list, tuple)):
                     date_value = date_value[0] if date_value else None
                 if date_value:
                     date_str = str(date_value).strip()
                     # Extract first 4 digits (year)
-                    import re
                     year_match = re.match(r'^(\d{4})', date_str)
                     if year_match:
-                        tags["YEAR"] = year_match.group(1)
+                        tags["year"] = year_match.group(1)
                         audio.save()
                         continue
 
-            raise ValueError(f"Missing YEAR tag and unable to extract from DATE in {file_path}")
+            raise ValueError(f"Missing year tag and unable to extract from date in {file_path}")
 
     def enforce_label_publisher_consistency(release_path: Path) -> None:
         """
-        If any of label/publisher/tpub (case-insensitive) are set on any track in the release,
-        enforce that:
-        - all three upper-case keys ('LABEL', 'PUBLISHER', 'TPUB') exist on every track that has at least one defined, and
-        - they all have the same value for that track.
+        If any of label/publisher/organization are set on any track in the release,
+        enforce that all three lowercase keys exist on every track and have the same value.
         """
-        canonical_keys = ["LABEL", "PUBLISHER", "TPUB"]
+        canonical_keys = ["label", "publisher", "organization"]
 
         # First pass: see if any of these tags exist at all in the release
         any_present = False
@@ -353,7 +350,7 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                 continue
             for key in list(audio.tags.keys()):
                 tag_str = _normalize_mutagen_tag_key(key)
-                if tag_str.upper() in canonical_keys:
+                if tag_str.lower() in canonical_keys:
                     any_present = True
                     break
             if any_present:
@@ -376,14 +373,14 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
 
             tags = audio.tags
 
-            # Collect any existing values for label/publisher/tpub (case-insensitive)
+            # Collect any existing values for label/publisher/organization
             values: list[str] = []
             keys_to_delete: list[str] = []
 
             for tag in list(audio.tags.keys()):
                 tag_str = _normalize_mutagen_tag_key(tag)
-                upper = tag_str.upper()
-                if upper in canonical_keys:
+                lower = tag_str.lower()
+                if lower in canonical_keys:
                     value = audio.tags[tag]
                     if isinstance(value, (list, tuple)):
                         if not value:
@@ -392,10 +389,9 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                     value_str = str(value)
                     if value_str:
                         values.append(value_str)
-                    # We'll re-write under canonical upper-case keys
                     keys_to_delete.append(tag)
 
-            # Remove old variants (including non-uppercase)
+            # Remove old variants
             for key in keys_to_delete:
                 if key in audio.tags:
                     del audio.tags[key]
@@ -408,23 +404,23 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                 for v in values[1:]:
                     if v != first:
                         raise ValueError(
-                            f"Inconsistent label/publisher/tpub values in file {file_path}: {values}"
+                            f"Inconsistent label/publisher/organization values in file {file_path}: {values}"
                         )
                 canonical_value = first
 
-            # If we have a value, set all three canonical upper-case keys to that value
+            # If we have a value, set all three canonical lowercase keys to that value
             if canonical_value is not None:
                 for ck in canonical_keys:
                     tags[ck] = canonical_value
 
             audio.save()
 
-    def normalize_all_tag_keys_to_uppercase(release_path: Path) -> None:
+    def normalize_all_tag_keys_to_lowercase(release_path: Path) -> None:
         """
-        For every track in the release, convert all tag keys to uppercase.
+        For every track in the release, convert all tag keys to lowercase.
 
-        If a uppercase key already exists and we are raising another variant of it,
-        we keep the existing uppercase key's value and drop the non-uppercase one.
+        If a lowercase key already exists and we are normalizing another variant of it,
+        we keep the existing lowercase key's value and drop the non-lowercase one.
         """
         for file_path in release_path.iterdir():
             if not file_path.is_file() or not is_music_file(file_path):
@@ -435,16 +431,16 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
 
             tags = audio.tags
 
-            uppercased_tags = {}
+            lowercased_tags = {}
             for raw_tag in list(tags.keys()):
                 key_str = _normalize_mutagen_tag_key(raw_tag)
-                upper = key_str.upper()
+                lower = key_str.lower()
 
-                if upper not in uppercased_tags:
-                    uppercased_tags[upper] = tags[raw_tag]
+                if lower not in lowercased_tags:
+                    lowercased_tags[lower] = tags[raw_tag]
 
             tags.clear()
-            for key, value in uppercased_tags.items():
+            for key, value in lowercased_tags.items():
                 tags[key] = value
 
             audio.save()
@@ -458,7 +454,7 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
         embed_release_cover_art(release_path)
         preprocess_release_metadata(release_path)
         enforce_label_publisher_consistency(release_path)
-        normalize_all_tag_keys_to_uppercase(release_path)
+        normalize_all_tag_keys_to_lowercase(release_path)
         enforce_year_tag(release_path)
 
     for release_path in releases:
@@ -475,9 +471,9 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
 
 
 def validate_releases(releases: list[Release]) -> tuple[list[Release], list[FailedRelease]]:
-    def validate_all_tag_keys_uppercase(release_path: Path) -> None:
+    def validate_all_tag_keys_lowercase(release_path: Path) -> None:
         """
-        Ensure that all tag keys on all tracks in the release are uppercase.
+        Ensure that all tag keys on all tracks in the release are lowercase.
         """
         for file_path in release_path.iterdir():
             if not file_path.is_file() or not is_music_file(file_path):
@@ -489,18 +485,18 @@ def validate_releases(releases: list[Release]) -> tuple[list[Release], list[Fail
 
             for raw_key in audio.tags.keys():
                 key_str = _normalize_mutagen_tag_key(raw_key)
-                if key_str != key_str.upper():
+                if key_str != key_str.lower():
                     raise ValueError(
-                        f"Non-uppercase tag key {key_str!r} found in file {file_path}; "
-                        f"all tag keys must be uppercase."
+                        f"Non-lowercase tag key {key_str!r} found in file {file_path}; "
+                        f"all tag keys must be lowercase."
                     )
 
     def validate_required_tags(release_path: Path) -> None:
         """
         Ensure all tracks have required tags for file naming:
-        ALBUMARTIST, YEAR, ALBUM, TRACKNUMBER, ARTIST, TITLE
+        albumartist, year, album, tracknumber, artist, title
         """
-        required_tags = ["ALBUMARTIST", "YEAR", "ALBUM", "TRACKNUMBER", "ARTIST", "TITLE"]
+        required_tags = ["albumartist", "year", "album", "tracknumber", "artist", "title"]
 
         for file_path in release_path.iterdir():
             if not file_path.is_file() or not is_music_file(file_path):
@@ -533,8 +529,8 @@ def validate_releases(releases: list[Release]) -> tuple[list[Release], list[Fail
         """
         Enforce that any label-related tags are identical across the entire release.
         """
-        canonical_keys = ["LABEL", "PUBLISHER", "TPUB"]
-        canonical_keys_upper = {k.upper() for k in canonical_keys}
+        canonical_keys = ["label", "publisher", "organization"]
+        canonical_keys_set = set(canonical_keys)
 
         # First, check if there are any label tags to validate
         any_present = False
@@ -545,7 +541,7 @@ def validate_releases(releases: list[Release]) -> tuple[list[Release], list[Fail
             if audio is None or not getattr(audio, "tags", None):
                 continue
             for key in audio.tags.keys():
-                if _normalize_mutagen_tag_key(key).upper() in canonical_keys_upper:
+                if _normalize_mutagen_tag_key(key).lower() in canonical_keys_set:
                     any_present = True
                     break
             if any_present:
@@ -562,17 +558,17 @@ def validate_releases(releases: list[Release]) -> tuple[list[Release], list[Fail
 
             audio = mutagen.File(file_path)
             if audio is None or not getattr(audio, "tags", None):
-                raise ValueError(f"Missing tags on file while validating label/publisher/tpub: {file_path}")
+                raise ValueError(f"Missing tags on file while validating label/publisher/organization: {file_path}")
 
             tags = audio.tags
 
-            # Force an error if any values are found that aren't all upper-case
+            # Force an error if any values are found that aren't all lowercase
             for key in list(tags.keys()):
                 key_str = _normalize_mutagen_tag_key(key)
-                if key_str.upper() in canonical_keys_upper and key_str not in canonical_keys:
+                if key_str.lower() in canonical_keys_set and key_str not in canonical_keys:
                     raise ValueError(
                         f"Non-canonical label key {key_str!r} in {file_path}; "
-                        f"use uppercase {canonical_keys} only."
+                        f"use lowercase {canonical_keys} only."
                     )
 
             # Collect the values for each label field on this track
@@ -590,7 +586,7 @@ def validate_releases(releases: list[Release]) -> tuple[list[Release], list[Fail
 
             if not stored_label_values:
                 raise ValueError(
-                    f"File {file_path} has no label/publisher/tpub set, "
+                    f"File {file_path} has no label/publisher/organization set, "
                     f"but other files in the release do."
                 )
 
@@ -618,7 +614,7 @@ def validate_releases(releases: list[Release]) -> tuple[list[Release], list[Fail
 
     for release in releases:
         try:
-            validate_all_tag_keys_uppercase(release.path)
+            validate_all_tag_keys_lowercase(release.path)
             validate_required_tags(release.path)
             validate_release_labels(release.path)
             validated_releases.append(release)
@@ -648,15 +644,15 @@ def check_releases_ready(releases: list[Release]) -> list[Release]:
         tags = audio.tags
         truthy_values = {"1", "true", "yes", "y"}
 
-        if "DONE" not in tags:
+        if "done" not in tags:
             return False
 
-        value = tags["DONE"]
+        value = tags["done"]
         if isinstance(value, (list, tuple)):
             if not value:
                 return False
             value = value[0]
-        
+
         value_str = str(value).strip().lower()
         return value_str in truthy_values
 
@@ -696,12 +692,12 @@ def publish_releases(releases: list[Release], library_path: Path) -> tuple[list[
     """
     Move releases to the library directory.
     For each release:
-    - Organize files in the format: {library_path}/{ALBUMARTIST}/{YEAR} - {ALBUM}/{TRACKNUMBER} - {ARTIST} - {TITLE}.{ext}
+    - Organize files in the format: {library_path}/{albumartist}/{year} - {album}/{tracknumber} - {artist} - {title}.{ext}
     - Check if target paths already exist in library
     - If exists, verify files match exactly (checksums)
     - If mismatch, don't overwrite and add to failed list
     - If doesn't exist or matches, move files to library
-    - Remove "DONE" tag after successful publish
+    - Remove "done" tag after successful publish
     - Delete empty source directory after all files moved
 
     Does NOT delete from to-import directory if publish fails (will be retried next iteration).
