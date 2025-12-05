@@ -391,20 +391,18 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                 continue
 
             tags = audio.tags
-            original_tags = list(tags.keys())
 
-            for raw_tag in original_tags:
+            uppercased_tags = {}
+            for raw_tag in list(tags.keys()):
                 key_str = _normalize_mutagen_tag_key(raw_tag)
                 upper = key_str.upper()
-                if key_str == upper:
-                    continue
 
-                value = tags[raw_tag]
-                del tags[raw_tag]
+                if upper not in uppercased_tags:
+                    uppercased_tags[upper] = tags[raw_tag]
 
-                if upper in tags:
-                    continue
-                tags[upper] = value
+            tags.clear()
+            for key, value in uppercased_tags.items():
+                tags[key] = value
 
             audio.save()
 
