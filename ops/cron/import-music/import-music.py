@@ -951,6 +951,24 @@ def main() -> None:
     print("=" * 80)
     print()
 
+    # Clean up empty directories in both locations
+    def cleanup_empty_dirs(path: Path) -> None:
+        """Recursively remove empty directories."""
+        if not path.exists() or not path.is_dir():
+            return
+        for subdir in list(path.iterdir()):
+            if subdir.is_dir():
+                cleanup_empty_dirs(subdir)
+        try:
+            path.rmdir()
+        except OSError:
+            pass
+
+    print("Cleaning up empty directories...")
+    cleanup_empty_dirs(ROOT_MUSIC_DIR)
+    cleanup_empty_dirs(LIBRARY_PATH)
+    print()
+
     print(f"Scanning {ROOT_MUSIC_DIR} for releases...")
     releases_to_validate = identify_release_directories(ROOT_MUSIC_DIR)
     print(f"Found {len(releases_to_validate)} release(s) to process")
