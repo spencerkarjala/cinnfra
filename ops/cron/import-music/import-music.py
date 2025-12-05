@@ -291,6 +291,49 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                         del audio.tags[tag]
                         audio.save()
 
+    def enforce_year_tag(release_path: Path) -> None:
+        """
+        Ensure every track has a YEAR tag. If DATE exists but YEAR doesn't, extract year from DATE.
+        """
+        for file_path in release_path.iterdir():
+            if not file_path.is_file() or not is_music_file(file_path):
+                continue
+
+            audio = mutagen.File(file_path)
+            if audio is None:
+                raise ValueError(f"Unable to open audio file: {file_path}")
+
+            if not hasattr(audio, "tags") or audio.tags is None:
+                raise ValueError(f"Missing tags on file while enforcing YEAR tag: {file_path}")
+
+            tags = audio.tags
+
+            # If YEAR already exists, we're good
+            if "YEAR" in tags and tags["YEAR"]:
+                value = tags["YEAR"]
+                if isinstance(value, (list, tuple)):
+                    if value and str(value[0]).strip():
+                        continue
+                elif str(value).strip():
+                    continue
+
+            # Try to extract from DATE
+            if "DATE" in tags and tags["DATE"]:
+                date_value = tags["DATE"]
+                if isinstance(date_value, (list, tuple)):
+                    date_value = date_value[0] if date_value else None
+                if date_value:
+                    date_str = str(date_value).strip()
+                    # Extract first 4 digits (year)
+                    import re
+                    year_match = re.match(r'^(\d{4})', date_str)
+                    if year_match:
+                        tags["YEAR"] = year_match.group(1)
+                        audio.save()
+                        continue
+
+            raise ValueError(f"Missing YEAR tag and unable to extract from DATE in {file_path}")
+
     def enforce_label_publisher_consistency(release_path: Path) -> None:
         """
         If any of label/publisher/tpub (case-insensitive) are set on any track in the release,
@@ -416,6 +459,7 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
         preprocess_release_metadata(release_path)
         enforce_label_publisher_consistency(release_path)
         normalize_all_tag_keys_to_uppercase(release_path)
+        enforce_year_tag(release_path)
 
     for release_path in releases:
         try:
@@ -450,6 +494,40 @@ def validate_releases(releases: list[Release]) -> tuple[list[Release], list[Fail
                         f"Non-uppercase tag key {key_str!r} found in file {file_path}; "
                         f"all tag keys must be uppercase."
                     )
+
+    def validate_required_tags(release_path: Path) -> None:
+        """
+        Ensure all tracks have required tags for file naming:
+        ALBUMARTIST, YEAR, ALBUM, TRACKNUMBER, ARTIST, TITLE
+        """
+        required_tags = ["ALBUMARTIST", "YEAR", "ALBUM", "TRACKNUMBER", "ARTIST", "TITLE"]
+
+        for file_path in release_path.iterdir():
+            if not file_path.is_file() or not is_music_file(file_path):
+                continue
+
+            audio = mutagen.File(file_path)
+            if audio is None or not getattr(audio, "tags", None):
+                raise ValueError(f"Missing tags on file: {file_path}")
+
+            tags = audio.tags
+            missing_tags = []
+
+            for required_tag in required_tags:
+                if required_tag not in tags:
+                    missing_tags.append(required_tag)
+                else:
+                    value = tags[required_tag]
+                    if isinstance(value, (list, tuple)):
+                        if not value or not str(value[0]).strip():
+                            missing_tags.append(required_tag)
+                    elif not str(value).strip():
+                        missing_tags.append(required_tag)
+
+            if missing_tags:
+                raise ValueError(
+                    f"Missing required tags in {file_path}: {', '.join(missing_tags)}"
+                )
 
     def validate_release_labels(release_path: Path) -> None:
         """
@@ -541,6 +619,7 @@ def validate_releases(releases: list[Release]) -> tuple[list[Release], list[Fail
     for release in releases:
         try:
             validate_all_tag_keys_uppercase(release.path)
+            validate_required_tags(release.path)
             validate_release_labels(release.path)
             validated_releases.append(release)
         except Exception as e:
@@ -617,12 +696,15 @@ def publish_releases(releases: list[Release], library_path: Path) -> tuple[list[
     """
     Move releases to the library directory.
     For each release:
-    - Check if it already exists in library
-    - If exists, verify every file matches exactly (checksums/sizes)
+    - Organize files in the format: {library_path}/{ALBUMARTIST}/{YEAR} - {ALBUM}/{TRACKNUMBER} - {ARTIST} - {TITLE}.{ext}
+    - Check if target paths already exist in library
+    - If exists, verify files match exactly (checksums)
     - If mismatch, don't overwrite and add to failed list
-    - If doesn't exist or matches, copy/move to library
+    - If doesn't exist or matches, move files to library
+    - Remove "DONE" tag after successful publish
+    - Delete empty source directory after all files moved
 
-    Does NOT delete from to-import directory (will happen next iteration).
+    Does NOT delete from to-import directory if publish fails (will be retried next iteration).
 
     Returns:
     - successfully_published: list of Release objects that were published
