@@ -134,16 +134,22 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
         Transcode all tracks in release to standard pre-chosen formats.
         """
         for file_path in release_path.iterdir():
-            if not file_path.is_file() or not is_music_file(file_path):
+            if not file_path.is_file():
                 continue
 
-            audio = mutagen.File(file_path)
-            if audio is None:
-                raise ValueError(f"Unable to open audio file: {file_path}")
-
+            # Check if it's a music file by extension
             codec = file_extension_to_codec.get(file_path.suffix.lower())
             if codec is None:
-                raise ValueError(f"Unknown file extension: {file_path.suffix}")
+                # Not a known music file extension, skip it
+                continue
+
+            # Try to open with mutagen
+            audio = mutagen.File(file_path)
+            if audio is None:
+                raise ValueError(
+                    f"File has music extension but cannot be read by mutagen: {file_path}\n"
+                    f"File may be corrupted or in an unsupported format"
+                )
 
             is_lossless = codec in SUPPORTED_LOSSLESS_CODECS
             is_lossy = codec in SUPPORTED_LOSSY_CODECS
