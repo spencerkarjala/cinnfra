@@ -646,6 +646,7 @@ def main() -> None:
             print(failure.error)
             print()
 
+    # Step 2: Validate that releases have been processed according to rules
     validated_releases, validation_failures = validate_releases(preprocessed_releases)
 
     if validation_failures:
@@ -654,13 +655,14 @@ def main() -> None:
             print(f"--- {failure.path} ---")
             print(failure.error)
             print()
+        return
 
-    # Step 2: Check which valid releases are marked as "done"
+    # Step 3: Check which valid releases are marked as "done"
     ready_to_publish = check_releases_ready(validated_releases)
     print("ready releases:")
     print(ready_to_publish)
 
-    # Step 3: Publish releases to library
+    # Step 4: Publish releases to library
     # published, publish_failures = publish_releases(ready_to_publish, LIBRARY_PATH)
 
 
