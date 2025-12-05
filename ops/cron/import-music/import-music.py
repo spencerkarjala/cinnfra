@@ -631,7 +631,9 @@ def main() -> None:
     if preprocess_failures:
         print("failures:")
         for failure in preprocess_failures:
-            print(f"{failure.path}: {failure.error}")
+            print(f"--- {failure.path} ---")
+            print(failure.error)
+            print()
 
     validate_releases(preprocessed_releases)
 
