@@ -283,7 +283,7 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                     if comment_value == None:
                         comment_text = ""
                     elif isinstance(comment_value, list):
-                        comment_value[0] if comment_value else ""
+                        comment_text = comment_value[0] if comment_value else ""
                     else:
                         comment_text = str(comment_value)
 
