@@ -390,6 +390,9 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
             if audio is None or not getattr(audio, "tags", None):
                 continue
 
+            if not audio.tags is dict:
+                raise ValueError(f"Ran into a non-dict form of tags: {audio.tags}")
+
             tags = audio.tags
             original_tags = list(tags.keys())
 
@@ -628,7 +631,7 @@ def main() -> None:
     if preprocess_failures:
         print("failures:")
         for failure in preprocess_failures:
-            print(f"    {failure}")
+            print(f"{failure.path}: {failure.error}")
 
     validate_releases(preprocessed_releases)
 
