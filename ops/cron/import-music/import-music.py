@@ -432,7 +432,7 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
     return successful_releases, failed_releases
 
 
-def validate_releases(releases: list[Release]) -> None:
+def validate_releases(releases: list[Release]) -> tuple[list[Release], list[FailedRelease]]:
     def validate_all_tag_keys_uppercase(release_path: Path) -> None:
         """
         Ensure that all tag keys on all tracks in the release are uppercase.
@@ -537,9 +537,21 @@ def validate_releases(releases: list[Release]) -> None:
                     f"expected {release_value!r}"
                 )
 
+    validated_releases = []
+    failed_releases = []
+
     for release in releases:
-        validate_all_tag_keys_uppercase(release.path)
-        validate_release_labels(release.path)
+        try:
+            validate_all_tag_keys_uppercase(release.path)
+            validate_release_labels(release.path)
+            validated_releases.append(release)
+        except Exception as e:
+            tb = traceback.format_exc()
+            error_text = f"{repr(e)}\n{tb}"
+            print(f"Error while validating {release.path}:\n{error_text}")
+            failed_releases.append(FailedRelease(path=release.path, error=error_text))
+
+    return validated_releases, failed_releases
 
 
 def check_releases_ready(releases: list[Release]) -> list[Release]:
@@ -628,16 +640,23 @@ def main() -> None:
     preprocessed_releases, preprocess_failures = preprocess_releases(releases_to_validate)
 
     if preprocess_failures:
-        print("failures:")
+        print("Preprocessing failures:")
         for failure in preprocess_failures:
             print(f"--- {failure.path} ---")
             print(failure.error)
             print()
 
-    validate_releases(preprocessed_releases)
+    validated_releases, validation_failures = validate_releases(preprocessed_releases)
+
+    if validation_failures:
+        print("Validation failures:")
+        for failure in validation_failures:
+            print(f"--- {failure.path} ---")
+            print(failure.error)
+            print()
 
     # Step 2: Check which valid releases are marked as "done"
-    ready_to_publish = check_releases_ready(preprocessed_releases)
+    ready_to_publish = check_releases_ready(validated_releases)
     print("ready releases:")
     print(ready_to_publish)
 
