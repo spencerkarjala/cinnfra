@@ -11,6 +11,7 @@ from PIL import Image
 from typing import Any, Optional
 
 ROOT_MUSIC_DIR = Path("/music/todo/")
+LIBRARY_PATH = Path("/music/done/")
 
 TARGET_LOSSLESS_CODEC = ".flac"
 TARGET_LOSSY_CODEC = ".opus"
@@ -495,6 +496,7 @@ def validate_releases(releases: list[Release]) -> tuple[list[Release], list[Fail
         """
         Ensure all tracks have required tags for file naming:
         albumartist, year, album, tracknumber, artist, title
+        Also ensure cover.jpg exists.
         """
         required_tags = ["albumartist", "year", "album", "tracknumber", "artist", "title"]
 
@@ -524,6 +526,11 @@ def validate_releases(releases: list[Release]) -> tuple[list[Release], list[Fail
                 raise ValueError(
                     f"Missing required tags in {file_path}: {', '.join(missing_tags)}"
                 )
+
+        # Ensure cover.jpg exists
+        cover_path = release_path / "cover.jpg"
+        if not cover_path.exists():
+            raise ValueError(f"Missing cover.jpg in {release_path}")
 
     def validate_release_labels(release_path: Path) -> None:
         """
@@ -706,40 +713,183 @@ def publish_releases(releases: list[Release], library_path: Path) -> tuple[list[
     - successfully_published: list of Release objects that were published
     - failed_to_publish: list of FailedRelease objects with error info
     """
-    pass
+    published_releases = []
+    failed_releases = []
+
+    def get_tag_value(tags, key: str) -> str:
+        """Extract and normalize a tag value to a string."""
+        value = tags[key]
+        if isinstance(value, (list, tuple)):
+            value = value[0] if value else ""
+        return str(value).strip()
+
+    def sanitize_filename(name: str) -> str:
+        """Remove characters that are problematic in filenames."""
+        replacements = {
+            '/': '-',
+            '\\': '-',
+            ':': '-',
+            '*': '',
+            '?': '',
+            '"': "'",
+            '<': '',
+            '>': '',
+            '|': '-',
+        }
+        for old, new in replacements.items():
+            name = name.replace(old, new)
+        return name.strip()
+
+    for release in releases:
+        try:
+            files_to_publish = []
+
+            for file_path in release.path.iterdir():
+                if not file_path.is_file() or not is_music_file(file_path):
+                    continue
+
+                audio = mutagen.File(file_path)
+                if audio is None or not getattr(audio, "tags", None):
+                    raise ValueError(f"Unable to read tags from {file_path}")
+
+                tags = audio.tags
+
+                albumartist = sanitize_filename(get_tag_value(tags, "albumartist"))
+                year = sanitize_filename(get_tag_value(tags, "year"))
+                album = sanitize_filename(get_tag_value(tags, "album"))
+                tracknumber = sanitize_filename(get_tag_value(tags, "tracknumber"))
+                artist = sanitize_filename(get_tag_value(tags, "artist"))
+                title = sanitize_filename(get_tag_value(tags, "title"))
+
+                # Pad track number to 2 digits if it's just a number
+                if tracknumber.isdigit():
+                    tracknumber = tracknumber.zfill(2)
+
+                album_dir = library_path / albumartist / f"{year} - {album}"
+                filename = f"{tracknumber} - {artist} - {title}{file_path.suffix}"
+                target_path = album_dir / filename
+
+                files_to_publish.append((file_path, target_path, audio))
+
+            for source_path, target_path, _ in files_to_publish:
+                if target_path.exists():
+                    source_hash = hashlib.sha256(source_path.read_bytes()).hexdigest()
+                    target_hash = hashlib.sha256(target_path.read_bytes()).hexdigest()
+
+                    if source_hash != target_hash:
+                        raise ValueError(
+                            f"File already exists with different content:\n"
+                            f"  Source: {source_path}\n"
+                            f"  Target: {target_path}\n"
+                            f"  Source hash: {source_hash}\n"
+                            f"  Target hash: {target_hash}"
+                        )
+
+            for source_path, target_path, audio in files_to_publish:
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+
+                if not target_path.exists():
+                    if "done" in audio.tags:
+                        del audio.tags["done"]
+                        audio.save()
+
+                    source_path.rename(target_path)
+                    print(f"Published: {source_path.name} -> {target_path}")
+                else:
+                    source_path.unlink()
+                    print(f"Deduplicated: {source_path.name} (already exists at {target_path})")
+
+            cover_path = release.path / "cover.jpg"
+            album_dir = files_to_publish[0][1].parent
+            target_cover = album_dir / "cover.jpg"
+            if not target_cover.exists():
+                cover_path.rename(target_cover)
+            else:
+                cover_path.unlink()
+
+            try:
+                release.path.rmdir()
+                print(f"Removed empty directory: {release.path}")
+            except OSError:
+                pass
+
+            published_releases.append(release)
+
+        except Exception as e:
+            tb = traceback.format_exc()
+            error_text = f"{repr(e)}\n{tb}"
+            print(f"Error while publishing {release.path}:\n{error_text}")
+            failed_releases.append(FailedRelease(path=release.path, error=error_text))
+
+    return published_releases, failed_releases
 
 
 def main() -> None:
-    releases_to_validate = identify_release_directories(ROOT_MUSIC_DIR)
+    print("=" * 80)
+    print("MUSIC IMPORT PIPELINE")
+    print("=" * 80)
+    print()
 
-    # Step 1: Preprocess to catch annoying issues
+    print(f"Scanning {ROOT_MUSIC_DIR} for releases...")
+    releases_to_validate = identify_release_directories(ROOT_MUSIC_DIR)
+    print(f"Found {len(releases_to_validate)} release(s) to process")
+    print()
+
+    print("-" * 80)
+    print("STEP 1: PREPROCESSING")
+    print("-" * 80)
     preprocessed_releases, preprocess_failures = preprocess_releases(releases_to_validate)
+    print(f"Preprocessed: {len(preprocessed_releases)} succeeded, {len(preprocess_failures)} failed")
 
     if preprocess_failures:
-        print("Preprocessing failures:")
+        print("\nPreprocessing failures:")
         for failure in preprocess_failures:
             print(f"--- {failure.path} ---")
             print(failure.error)
             print()
 
-    # Step 2: Validate that releases have been processed according to rules
+    print("-" * 80)
+    print("STEP 2: VALIDATION")
+    print("-" * 80)
     validated_releases, validation_failures = validate_releases(preprocessed_releases)
+    print(f"Validated: {len(validated_releases)} succeeded, {len(validation_failures)} failed")
 
     if validation_failures:
-        print("Validation failures:")
+        print("\nValidation failures:")
         for failure in validation_failures:
             print(f"--- {failure.path} ---")
             print(failure.error)
             print()
         return
 
-    # Step 3: Check which valid releases are marked as "done"
+    print("-" * 80)
+    print("STEP 3: CHECKING FOR READY RELEASES")
+    print("-" * 80)
     ready_to_publish = check_releases_ready(validated_releases)
-    print("ready releases:")
-    print(ready_to_publish)
+    print(f"Found {len(ready_to_publish)} release(s) marked as done and ready to publish")
+    print()
 
-    # Step 4: Publish releases to library
-    # published, publish_failures = publish_releases(ready_to_publish, LIBRARY_PATH)
+    if not ready_to_publish:
+        print("No releases ready to publish. Exiting.")
+        print("=" * 80)
+        return
+
+    print("-" * 80)
+    print("STEP 4: PUBLISHING TO LIBRARY")
+    print("-" * 80)
+    published, publish_failures = publish_releases(ready_to_publish, LIBRARY_PATH)
+    print(f"\nPublished: {len(published)} succeeded, {len(publish_failures)} failed")
+
+    if publish_failures:
+        print("\nPublish failures:")
+        for failure in publish_failures:
+            print(f"--- {failure.path} ---")
+            print(failure.error)
+            print()
+
+    print("=" * 80)
+    print("PIPELINE COMPLETE")
+    print("=" * 80)
 
 
 if __name__ == "__main__":
