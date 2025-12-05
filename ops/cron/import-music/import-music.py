@@ -234,7 +234,7 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                 and len(audio['metadata_block_picture']) > 0
             ):
                 picture_data = base64.b64decode(audio['metadata_block_picture'][0])
-                picture = mutagen.flac.Picture(raw_block)
+                picture = mutagen.flac.Picture(picture_data)
                 embedded_data = picture.data
 
             if embedded_data:
@@ -283,7 +283,7 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                     if comment_value == None:
                         comment_text = ""
                     elif isinstance(comment_value, list):
-                        comment_text = comment_value[0] if comment_value else ""
+                        comment_text = str(comment_value[0]) if comment_value else ""
                     else:
                         comment_text = str(comment_value)
 
@@ -565,7 +565,7 @@ def check_releases_ready(releases: list[Release]) -> list[Release]:
         value = tags["DONE"]
         if isinstance(value, (list, tuple)):
             if not value:
-                return False;
+                return False
             value = value[0]
         
         value_str = str(value).strip().lower()
@@ -594,7 +594,7 @@ def check_releases_ready(releases: list[Release]) -> list[Release]:
             at_least_one_done = True
             print(f"Found a file marked 'done': {file_path}")
 
-        if all_done:
+        if all_done and at_least_one_done:
             print(f"Including release in releases to publish: {release.path}")
             ready_releases.append(release)
         elif at_least_one_done:
