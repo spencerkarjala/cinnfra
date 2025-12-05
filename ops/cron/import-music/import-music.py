@@ -390,9 +390,6 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
             if audio is None or not getattr(audio, "tags", None):
                 continue
 
-            if not audio.tags is dict:
-                raise ValueError(f"Ran into a non-dict form of tags: {audio.tags}")
-
             tags = audio.tags
             original_tags = list(tags.keys())
 
@@ -402,7 +399,9 @@ def preprocess_releases(releases: list[Path]) -> tuple[list[Release], list[Faile
                 if key_str == upper:
                     continue
 
-                value = tags.pop(raw_tag)
+                value = tags[raw_tag]
+                del tags[raw_tag]
+
                 if upper in tags:
                     continue
                 tags[upper] = value
