@@ -2,6 +2,7 @@ import base64
 import hashlib
 import mutagen
 import re
+import shutil
 import subprocess
 import traceback
 
@@ -716,6 +717,21 @@ def publish_releases(releases: list[Release], library_path: Path) -> tuple[list[
     published_releases = []
     failed_releases = []
 
+    def cleanup_empty_dirs(path: Path) -> None:
+        """Recursively remove empty directories."""
+        if not path.exists() or not path.is_dir():
+            return
+        for subdir in list(path.iterdir()):
+            if subdir.is_dir():
+                cleanup_empty_dirs(subdir)
+        try:
+            path.rmdir()
+        except OSError:
+            pass
+
+    # Clean up any empty directories from previous failed runs
+    cleanup_empty_dirs(library_path)
+
     def get_tag_value(tags, key: str) -> str:
         """Extract and normalize a tag value to a string."""
         value = tags[key]
@@ -789,13 +805,43 @@ def publish_releases(releases: list[Release], library_path: Path) -> tuple[list[
                 target_path.parent.mkdir(parents=True, exist_ok=True)
 
                 if not target_path.exists():
-                    if "done" in audio.tags:
-                        del audio.tags["done"]
-                        audio.save()
+                    # Stage 1: Copy to temp location
+                    temp_path = Path(f"/tmp/{source_path.name}")
+                    try:
+                        shutil.copy2(source_path, temp_path)
 
-                    source_path.rename(target_path)
-                    print(f"Published: {source_path.name} -> {target_path}")
+                        # Stage 2: Remove "done" tag from temp file
+                        temp_audio = mutagen.File(temp_path)
+                        if temp_audio and hasattr(temp_audio, "tags") and temp_audio.tags:
+                            if "done" in temp_audio.tags:
+                                del temp_audio.tags["done"]
+                                temp_audio.save()
+
+                        # Stage 3: Copy temp file to final destination
+                        shutil.copy2(temp_path, target_path)
+
+                        # Stage 4: Validate file exists and has correct hash
+                        if not target_path.exists():
+                            raise RuntimeError(f"Failed to copy file to target: {target_path}")
+
+                        temp_hash = hashlib.sha256(temp_path.read_bytes()).hexdigest()
+                        target_hash = hashlib.sha256(target_path.read_bytes()).hexdigest()
+                        if temp_hash != target_hash:
+                            raise RuntimeError(
+                                f"Hash mismatch after copy to target:\n"
+                                f"  Temp: {temp_hash}\n"
+                                f"  Target: {target_hash}"
+                            )
+
+                        # Stage 5: Only now delete the original source file
+                        source_path.unlink()
+                        print(f"Published: {source_path.name} -> {target_path}")
+                    finally:
+                        # Always clean up temp file, even if we fail
+                        if temp_path.exists():
+                            temp_path.unlink()
                 else:
+                    # File already exists with same content (verified earlier), just delete source
                     source_path.unlink()
                     print(f"Deduplicated: {source_path.name} (already exists at {target_path})")
 
@@ -803,7 +849,8 @@ def publish_releases(releases: list[Release], library_path: Path) -> tuple[list[
             album_dir = files_to_publish[0][1].parent
             target_cover = album_dir / "cover.jpg"
             if not target_cover.exists():
-                cover_path.rename(target_cover)
+                shutil.copy2(cover_path, target_cover)
+                cover_path.unlink()
             else:
                 cover_path.unlink()
 
