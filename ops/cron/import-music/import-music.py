@@ -908,6 +908,7 @@ def publish_releases(releases: list[Release], library_path: Path) -> tuple[list[
                     source_path.unlink()
                     print(f"Deduplicated: {source_path.name} (already exists at {target_path})")
 
+            # Move cover.jpg to album directory
             cover_path = release.path / "cover.jpg"
             album_dir = files_to_publish[0][1].parent
             target_cover = album_dir / "cover.jpg"
@@ -917,6 +918,16 @@ def publish_releases(releases: list[Release], library_path: Path) -> tuple[list[
             else:
                 cover_path.unlink()
 
+            # Move any remaining files (artwork, liner notes, etc.) to album directory
+            for remaining_file in release.path.iterdir():
+                if remaining_file.is_file():
+                    target_path = album_dir / remaining_file.name
+                    if not target_path.exists():
+                        shutil.copy2(remaining_file, target_path)
+                        print(f"Moved extra file: {remaining_file.name}")
+                    remaining_file.unlink()
+
+            # Remove source directory (should be empty now)
             try:
                 release.path.rmdir()
                 print(f"Removed empty directory: {release.path}")
