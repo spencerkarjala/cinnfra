@@ -18,6 +18,17 @@ spec:
       containers:
       - name: navidrome
         image: docker.io/deluan/navidrome:0.58.0
+        env:
+        - name: ND_LASTFM_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: navidrome
+              key: lastfm_api_key
+        - name: ND_LASTFM_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: navidrome
+              key: lastfm_secret
         ports:
         - containerPort: 4533
         volumeMounts:
