@@ -19,7 +19,7 @@ spec:
       - name: navidrome
         image: docker.io/deluan/navidrome:0.58.0
         env:
-        - name: ND_LASTFM_API_KEY
+        - name: ND_LASTFM_APIKEY
           valueFrom:
             secretKeyRef:
               name: navidrome
