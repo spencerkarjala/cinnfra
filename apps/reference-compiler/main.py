@@ -58,7 +58,7 @@ class ArtworkResponse(BaseModel):
 async def init_database():
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute("""
-            CREATE TABLE IF NOT EXISTS references (
+            CREATE TABLE IF NOT EXISTS art_references (
                 id TEXT PRIMARY KEY,
                 url TEXT NOT NULL,
                 artist TEXT NOT NULL,
@@ -82,7 +82,7 @@ async def save_reference(
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute(
             """
-            INSERT INTO references (id, url, artist, track_name, media_type, filename, fetched_at)
+            INSERT INTO art_references (id, url, artist, track_name, media_type, filename, fetched_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (reference_id, url, artist, track_name, media_type, filename, datetime.now(timezone.utc).isoformat()),
@@ -93,14 +93,14 @@ async def save_reference(
 async def get_all_references() -> list[dict]:
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT * FROM references ORDER BY fetched_at DESC") as cursor:
+        async with db.execute("SELECT * FROM art_references ORDER BY fetched_at DESC") as cursor:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
 
 
 async def delete_reference(reference_id: str) -> bool:
     async with aiosqlite.connect(DATABASE_PATH) as db:
-        cursor = await db.execute("DELETE FROM references WHERE id = ?", (reference_id,))
+        cursor = await db.execute("DELETE FROM art_references WHERE id = ?", (reference_id,))
         await db.commit()
         return cursor.rowcount > 0
 
@@ -135,19 +135,27 @@ async def download_image(image_url: str, output_path: Path) -> None:
         output_path.write_bytes(response.content)
 
 
+SOUNDCLOUD_OG_TITLE_PATTERN = re.compile(r'<meta property="og:title" content="([^"]+)"')
+SOUNDCLOUD_TITLE_ARTIST_PATTERN = re.compile(r'<title>Stream .+ by (.+?) \| Listen')
+
+
 async def fetch_soundcloud_artwork(url: str) -> ArtworkResult:
     """Fetches artwork and metadata from a SoundCloud track page."""
     match = SOUNDCLOUD_TRACK_PATTERN.match(url)
     if not match:
         raise ValueError("Invalid URL format")
 
-    artist = match.group(1)
-    track_name = match.group(2)
-
     page_content = await fetch_page_content(url)
+
     artwork_match = SOUNDCLOUD_ARTWORK_PATTERN.search(page_content)
     if not artwork_match:
         raise ValueError("No artwork found")
+
+    og_title_match = SOUNDCLOUD_OG_TITLE_PATTERN.search(page_content)
+    track_name = og_title_match.group(1) if og_title_match else match.group(2)
+
+    artist_match = SOUNDCLOUD_TITLE_ARTIST_PATTERN.search(page_content)
+    artist = artist_match.group(1) if artist_match else match.group(1)
 
     base_url = artwork_match.group(1)
     extension = artwork_match.group(3)
