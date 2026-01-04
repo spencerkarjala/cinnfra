@@ -3,5 +3,6 @@ kind: Kustomization
 resources:
   - copyparty.yaml
   - metadata-remote.yaml
-  - picard.yaml
   - navidrome.yaml
+  - picard.yaml
+  - reference-compiler.yaml
