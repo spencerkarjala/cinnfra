@@ -1,6 +1,6 @@
 FROM docker.io/library/python:3.12-slim
 
-RUN useradd -m refcompuser
+RUN useradd -m -u 1000 refcompuser
 USER refcompuser
 
 ENV REFERENCE_COMPILER_DIR=/home/refcompuser
