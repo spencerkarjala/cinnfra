@@ -1,8 +1,6 @@
-FROM docker.io/library/python:alpine3.21
+FROM docker.io/library/python:3.12-slim
 
-RUN apk add --no-cache libgcc
-
-RUN adduser -D refcompuser
+RUN useradd -m refcompuser
 USER refcompuser
 
 ENV REFERENCE_COMPILER_DIR=/home/refcompuser
