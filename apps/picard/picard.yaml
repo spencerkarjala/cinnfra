@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: picard
+  namespace: apps
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: picard
+  template:
+    metadata:
+      labels:
+        app: picard
+    spec:
+      containers:
+      - name: picard
+        image: mikenye/picard:latest
+        ports:
+        - containerPort: 5800
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        - name: music-to-import
+          mountPath: /music
+      volumes:
+      - name: config
+        hostPath:
+          path: /srv/data/picard/config/
+          type: DirectoryOrCreate
+      - name: music-to-import
+        persistentVolumeClaim:
+          claimName: music-to-import
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: picard
+  namespace: apps
+spec:
+  selector:
+    app: picard
+  ports:
+  - port: 80
+    targetPort: 5800
