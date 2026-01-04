@@ -1,0 +1,18 @@
+FROM docker.io/library/python:alpine3.21
+
+RUN adduser -D refcompuser
+USER refcompuser
+
+ENV REFERENCE_COMPILER_DIR=/home/refcompuser
+WORKDIR $REFERENCE_COMPILER_DIR
+COPY --chown=refcompuser:refcompuser ./apps/reference-compiler/main.py $REFERENCE_COMPILER_DIR
+COPY --chown=refcompuser:refcompuser ./apps/reference-compiler/pyproject.toml $REFERENCE_COMPILER_DIR
+COPY --chown=refcompuser:refcompuser ./apps/reference-compiler/uv.lock $REFERENCE_COMPILER_DIR
+
+ENV PATH=$PATH:/home/refcompuser/.local/bin/
+RUN pip install --no-cache-dir uv==0.9.5 \
+    && uv sync --frozen
+
+EXPOSE 8000
+
+CMD ["uv", "run", "--no-sync", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

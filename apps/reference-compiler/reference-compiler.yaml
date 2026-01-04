@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reference-compiler
+  namespace: apps
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reference-compiler
+  template:
+    metadata:
+      labels:
+        app: reference-compiler
+    spec:
+      containers:
+      - name: reference-compiler
+        image: ghcr.io/spencerkarjala/reference-compiler:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: OUTPUT_DIR
+          value: /data
+        - name: DATABASE_PATH
+          value: /data/references.db
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: references
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reference-compiler
+  namespace: apps
+spec:
+  selector:
+    app: reference-compiler
+  ports:
+  - port: 80
+    targetPort: 8000
