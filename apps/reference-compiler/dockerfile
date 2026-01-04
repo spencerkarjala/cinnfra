@@ -1,5 +1,7 @@
 FROM docker.io/library/python:alpine3.21
 
+RUN apk add --no-cache libgcc
+
 RUN adduser -D refcompuser
 USER refcompuser
 
