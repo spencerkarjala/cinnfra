@@ -3,3 +3,4 @@ kind: Kustomization
 resources:
   - pv-music.yaml
   - pv-music-to-import.yaml
+  - pv-references.yaml
