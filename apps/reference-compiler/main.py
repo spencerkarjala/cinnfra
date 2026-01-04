@@ -71,6 +71,18 @@ async def init_database():
         await db.commit()
 
 
+async def find_existing_reference(url: str, media_type: str) -> dict | None:
+    """Finds an existing reference by URL and media type."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM art_references WHERE url = ? AND media_type = ?",
+            (url, media_type),
+        ) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+
 async def save_reference(
     reference_id: str,
     url: str,
@@ -86,6 +98,23 @@ async def save_reference(
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (reference_id, url, artist, track_name, media_type, filename, datetime.now(timezone.utc).isoformat()),
+        )
+        await db.commit()
+
+
+async def update_reference(
+    reference_id: str,
+    artist: str,
+    track_name: str,
+) -> None:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute(
+            """
+            UPDATE art_references
+            SET artist = ?, track_name = ?, fetched_at = ?
+            WHERE id = ?
+            """,
+            (artist, track_name, datetime.now(timezone.utc).isoformat(), reference_id),
         )
         await db.commit()
 
@@ -192,9 +221,16 @@ async def fetch_artwork(request: ArtworkRequest):
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error))
 
-    reference_id = str(uuid.uuid4())
-    extension = result.image_url.rsplit(".", 1)[-1]
-    filename = f"{reference_id}.{extension}"
+    existing = await find_existing_reference(url, result.media_type)
+
+    if existing:
+        reference_id = existing["id"]
+        filename = existing["filename"]
+    else:
+        reference_id = str(uuid.uuid4())
+        extension = result.image_url.rsplit(".", 1)[-1]
+        filename = f"{reference_id}.{extension}"
+
     output_path = OUTPUT_DIRECTORY / filename
 
     try:
@@ -202,7 +238,10 @@ async def fetch_artwork(request: ArtworkRequest):
     except httpx.HTTPError as error:
         raise HTTPException(status_code=502, detail=f"Failed to download: {error}")
 
-    await save_reference(reference_id, url, result.artist, result.track_name, result.media_type, filename)
+    if existing:
+        await update_reference(reference_id, result.artist, result.track_name)
+    else:
+        await save_reference(reference_id, url, result.artist, result.track_name, result.media_type, filename)
 
     return ArtworkResponse(
         id=reference_id,
@@ -384,9 +423,16 @@ async def submit_url(url: str = Form(...)):
         error_html = '<div class="result error">Nothing found.</div>'
         return INDEX_HTML.format(result=error_html, references=render_references_html(references))
 
-    reference_id = str(uuid.uuid4())
-    extension = result.image_url.rsplit(".", 1)[-1]
-    filename = f"{reference_id}.{extension}"
+    existing = await find_existing_reference(url, result.media_type)
+
+    if existing:
+        reference_id = existing["id"]
+        filename = existing["filename"]
+    else:
+        reference_id = str(uuid.uuid4())
+        extension = result.image_url.rsplit(".", 1)[-1]
+        filename = f"{reference_id}.{extension}"
+
     output_path = OUTPUT_DIRECTORY / filename
 
     try:
@@ -396,12 +442,16 @@ async def submit_url(url: str = Form(...)):
         error_html = f'<div class="result error">Failed to download: {error}</div>'
         return INDEX_HTML.format(result=error_html, references=render_references_html(references))
 
-    await save_reference(reference_id, url, result.artist, result.track_name, result.media_type, filename)
+    if existing:
+        await update_reference(reference_id, result.artist, result.track_name)
+    else:
+        await save_reference(reference_id, url, result.artist, result.track_name, result.media_type, filename)
 
     references = await get_all_references()
+    action = "Updated" if existing else "Saved"
     result_html = f'''
     <div class="result">
-        <p>Saved: <strong>{result.artist}</strong> - {result.track_name}</p>
+        <p>{action}: <strong>{result.artist}</strong> - {result.track_name}</p>
         <img src="/artwork/{filename}" alt="Artwork">
     </div>
     '''
