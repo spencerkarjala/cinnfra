@@ -18,6 +18,7 @@ spec:
       containers:
       - name: reference-compiler
         image: ghcr.io/spencerkarjala/reference-compiler:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 8000
         env:

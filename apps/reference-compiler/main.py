@@ -25,6 +25,9 @@ SOUNDCLOUD_TRACK_PATTERN = re.compile(r"^https?://soundcloud\.com/([\w-]+)/([\w-
 SOUNDCLOUD_ARTWORK_PATTERN = re.compile(
     r"(https://i1\.sndcdn\.com/artworks-[^\"']+?)-(\w+)\.(jpg|png|jpeg)"
 )
+SOUNDCLOUD_WAVEFORM_PATTERN = re.compile(
+    r"(https://i1\.sndcdn\.com/visuals-[^\"'\)]+?)-(\w+)\.(jpg|png|jpeg)"
+)
 
 
 class MediaType:
@@ -40,7 +43,7 @@ class ArtworkResult:
     media_type: str
 
 
-ArtworkHandler = Callable[[str], Coroutine[None, None, ArtworkResult]]
+ArtworkHandler = Callable[[str], Coroutine[None, None, list[ArtworkResult]]]
 
 
 class ArtworkRequest(BaseModel):
@@ -168,17 +171,13 @@ SOUNDCLOUD_OG_TITLE_PATTERN = re.compile(r'<meta property="og:title" content="([
 SOUNDCLOUD_TITLE_ARTIST_PATTERN = re.compile(r'<title>Stream .+ by (.+?) \| Listen')
 
 
-async def fetch_soundcloud_artwork(url: str) -> ArtworkResult:
-    """Fetches artwork and metadata from a SoundCloud track page."""
+async def fetch_soundcloud_artwork(url: str) -> list[ArtworkResult]:
+    """Fetches all available artwork from a SoundCloud track page."""
     match = SOUNDCLOUD_TRACK_PATTERN.match(url)
     if not match:
         raise ValueError("Invalid URL format")
 
     page_content = await fetch_page_content(url)
-
-    artwork_match = SOUNDCLOUD_ARTWORK_PATTERN.search(page_content)
-    if not artwork_match:
-        raise ValueError("No artwork found")
 
     og_title_match = SOUNDCLOUD_OG_TITLE_PATTERN.search(page_content)
     track_name = og_title_match.group(1) if og_title_match else match.group(2)
@@ -186,16 +185,34 @@ async def fetch_soundcloud_artwork(url: str) -> ArtworkResult:
     artist_match = SOUNDCLOUD_TITLE_ARTIST_PATTERN.search(page_content)
     artist = artist_match.group(1) if artist_match else match.group(1)
 
-    base_url = artwork_match.group(1)
-    extension = artwork_match.group(3)
-    image_url = f"{base_url}-original.{extension}"
+    results = []
 
-    return ArtworkResult(
-        image_url=image_url,
-        artist=artist,
-        track_name=track_name,
-        media_type=MediaType.SOUNDCLOUD_TRACK_COVER,
-    )
+    artwork_match = SOUNDCLOUD_ARTWORK_PATTERN.search(page_content)
+    if artwork_match:
+        base_url = artwork_match.group(1)
+        extension = artwork_match.group(3)
+        results.append(ArtworkResult(
+            image_url=f"{base_url}-original.{extension}",
+            artist=artist,
+            track_name=track_name,
+            media_type=MediaType.SOUNDCLOUD_TRACK_COVER,
+        ))
+
+    waveform_match = SOUNDCLOUD_WAVEFORM_PATTERN.search(page_content)
+    if waveform_match:
+        base_url = waveform_match.group(1)
+        extension = waveform_match.group(3)
+        results.append(ArtworkResult(
+            image_url=f"{base_url}-original.{extension}",
+            artist=artist,
+            track_name=track_name,
+            media_type=MediaType.SOUNDCLOUD_TRACK_WAVEFORM,
+        ))
+
+    if not results:
+        raise ValueError("No artwork found")
+
+    return results
 
 
 def get_artwork_handler(url: str) -> ArtworkHandler | None:
@@ -205,7 +222,7 @@ def get_artwork_handler(url: str) -> ArtworkHandler | None:
     return None
 
 
-@app.post("/artwork", response_model=ArtworkResponse)
+@app.post("/artwork", response_model=list[ArtworkResponse])
 async def fetch_artwork(request: ArtworkRequest):
     """Fetches artwork from a URL and saves it to the database."""
     url = str(request.url)
@@ -215,41 +232,48 @@ async def fetch_artwork(request: ArtworkRequest):
         raise HTTPException(status_code=400, detail="Unsupported URL")
 
     try:
-        result = await handler(url)
+        results = await handler(url)
     except httpx.HTTPError as error:
         raise HTTPException(status_code=502, detail=f"Failed to fetch page: {error}")
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error))
 
-    existing = await find_existing_reference(url, result.media_type)
+    responses = []
+    for result in results:
+        existing = await find_existing_reference(url, result.media_type)
 
-    if existing:
-        reference_id = existing["id"]
-        filename = existing["filename"]
-    else:
-        reference_id = str(uuid.uuid4())
-        extension = result.image_url.rsplit(".", 1)[-1]
-        filename = f"{reference_id}.{extension}"
+        if existing:
+            reference_id = existing["id"]
+            filename = existing["filename"]
+        else:
+            reference_id = str(uuid.uuid4())
+            extension = result.image_url.rsplit(".", 1)[-1]
+            filename = f"{reference_id}.{extension}"
 
-    output_path = OUTPUT_DIRECTORY / filename
+        output_path = OUTPUT_DIRECTORY / filename
 
-    try:
-        await download_image(result.image_url, output_path)
-    except httpx.HTTPError as error:
-        raise HTTPException(status_code=502, detail=f"Failed to download: {error}")
+        try:
+            await download_image(result.image_url, output_path)
+        except httpx.HTTPError:
+            continue
 
-    if existing:
-        await update_reference(reference_id, result.artist, result.track_name)
-    else:
-        await save_reference(reference_id, url, result.artist, result.track_name, result.media_type, filename)
+        if existing:
+            await update_reference(reference_id, result.artist, result.track_name)
+        else:
+            await save_reference(reference_id, url, result.artist, result.track_name, result.media_type, filename)
 
-    return ArtworkResponse(
-        id=reference_id,
-        filename=filename,
-        artist=result.artist,
-        track_name=result.track_name,
-        media_type=result.media_type,
-    )
+        responses.append(ArtworkResponse(
+            id=reference_id,
+            filename=filename,
+            artist=result.artist,
+            track_name=result.track_name,
+            media_type=result.media_type,
+        ))
+
+    if not responses:
+        raise HTTPException(status_code=502, detail="Failed to download any artwork")
+
+    return responses
 
 
 @app.get("/artwork/{filename}")
@@ -413,7 +437,7 @@ async def submit_url(url: str = Form(...)):
         return INDEX_HTML.format(result=error_html, references=render_references_html(references))
 
     try:
-        result = await handler(url)
+        results = await handler(url)
     except httpx.HTTPError as error:
         references = await get_all_references()
         error_html = f'<div class="result error">Failed to fetch page: {error}</div>'
@@ -423,39 +447,51 @@ async def submit_url(url: str = Form(...)):
         error_html = '<div class="result error">Nothing found.</div>'
         return INDEX_HTML.format(result=error_html, references=render_references_html(references))
 
-    existing = await find_existing_reference(url, result.media_type)
+    saved_items = []
+    for result in results:
+        existing = await find_existing_reference(url, result.media_type)
 
-    if existing:
-        reference_id = existing["id"]
-        filename = existing["filename"]
-    else:
-        reference_id = str(uuid.uuid4())
-        extension = result.image_url.rsplit(".", 1)[-1]
-        filename = f"{reference_id}.{extension}"
+        if existing:
+            reference_id = existing["id"]
+            filename = existing["filename"]
+            action = "Updated"
+        else:
+            reference_id = str(uuid.uuid4())
+            extension = result.image_url.rsplit(".", 1)[-1]
+            filename = f"{reference_id}.{extension}"
+            action = "Saved"
 
-    output_path = OUTPUT_DIRECTORY / filename
+        output_path = OUTPUT_DIRECTORY / filename
 
-    try:
-        await download_image(result.image_url, output_path)
-    except httpx.HTTPError as error:
-        references = await get_all_references()
-        error_html = f'<div class="result error">Failed to download: {error}</div>'
-        return INDEX_HTML.format(result=error_html, references=render_references_html(references))
+        try:
+            await download_image(result.image_url, output_path)
+        except httpx.HTTPError:
+            continue
 
-    if existing:
-        await update_reference(reference_id, result.artist, result.track_name)
-    else:
-        await save_reference(reference_id, url, result.artist, result.track_name, result.media_type, filename)
+        if existing:
+            await update_reference(reference_id, result.artist, result.track_name)
+        else:
+            await save_reference(reference_id, url, result.artist, result.track_name, result.media_type, filename)
+
+        saved_items.append((action, result, filename))
 
     references = await get_all_references()
-    action = "Updated" if existing else "Saved"
-    result_html = f'''
-    <div class="result">
-        <p>{action}: <strong>{result.artist}</strong> - {result.track_name}</p>
-        <img src="/artwork/{filename}" alt="Artwork">
-    </div>
-    '''
-    return INDEX_HTML.format(result=result_html, references=render_references_html(references))
+
+    if not saved_items:
+        error_html = '<div class="result error">Failed to download artwork.</div>'
+        return INDEX_HTML.format(result=error_html, references=render_references_html(references))
+
+    result_parts = []
+    for action, result, filename in saved_items:
+        result_parts.append(f'''
+        <div class="result">
+            <p>{action}: <strong>{result.artist}</strong> - {result.track_name}</p>
+            <p class="media-type">{result.media_type}</p>
+            <img src="/artwork/{filename}" alt="Artwork">
+        </div>
+        ''')
+
+    return INDEX_HTML.format(result="".join(result_parts), references=render_references_html(references))
 
 
 @app.post("/delete/{reference_id}", response_class=HTMLResponse)
