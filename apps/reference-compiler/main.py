@@ -26,7 +26,7 @@ SOUNDCLOUD_ARTWORK_PATTERN = re.compile(
     r"(https://i1\.sndcdn\.com/artworks-[^\"']+?)-(\w+)\.(jpg|png|jpeg)"
 )
 SOUNDCLOUD_WAVEFORM_PATTERN = re.compile(
-    r"(https://i1\.sndcdn\.com/visuals-[^\"'\)]+?)-(\w+)\.(jpg|png|jpeg)"
+    r"(https://i1\.sndcdn\.com/visuals-[a-zA-Z0-9]{16}-[^\"']+?)-(\w+)\.(jpg|png|jpeg)"
 )
 
 
