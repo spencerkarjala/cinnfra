@@ -5,7 +5,7 @@ USER refcompuser
 
 ENV REFERENCE_COMPILER_DIR=/home/refcompuser
 WORKDIR $REFERENCE_COMPILER_DIR
-COPY --chown=refcompuser:refcompuser ./apps/reference-compiler/main.py $REFERENCE_COMPILER_DIR
+COPY --chown=refcompuser:refcompuser ./apps/reference-compiler/src $REFERENCE_COMPILER_DIR
 COPY --chown=refcompuser:refcompuser ./apps/reference-compiler/pyproject.toml $REFERENCE_COMPILER_DIR
 COPY --chown=refcompuser:refcompuser ./apps/reference-compiler/uv.lock $REFERENCE_COMPILER_DIR
 

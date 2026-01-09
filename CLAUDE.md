@@ -1,2 +1,3 @@
 - Try to only comment things that add context. Don't use comments that are descriptive of the code; rather, create comments that include larger context about something. Say nothing if nothing needs to be said. Use descriptive variable and function names instead.
 - Always place imports at the top of their respective files, unless it seems intentionally done that way; eg. for manipulating imports for testing.
+- Always use `uv` for Python projects (running scripts, managing dependencies, etc.). Use `uv run` to execute Python code.
