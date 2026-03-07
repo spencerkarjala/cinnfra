@@ -12,6 +12,33 @@ spec:
     spec:
       template:
         spec:
+          initContainers:
+          - name: fix-ownership
+            image: busybox:latest
+            command: ["chown", "-R", "1000:1000", "/music/todo/"]
+            volumeMounts:
+            - name: music-to-import
+              mountPath: /music/todo/
+            securityContext:
+              runAsUser: 0
+          - name: extract-zips
+            image: busybox:latest
+            command: ["/bin/sh", "-c"]
+            args:
+              - |
+                for zip in /music/todo/*.zip; do
+                  [ -f "$zip" ] || continue
+                  dir=$(mktemp -d /music/todo/XXXXXXXXXX)
+                  mv "$zip" "$dir/"
+                  unzip -d "$dir" "$dir/$(basename "$zip")"
+                  rm "$dir/$(basename "$zip")"
+                done
+            volumeMounts:
+            - name: music-to-import
+              mountPath: /music/todo/
+            securityContext:
+              runAsUser: 1000
+              runAsGroup: 1000
           containers:
           - name: import-music
             image: ghcr.io/spencerkarjala/import-music:latest
