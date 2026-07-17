@@ -10,7 +10,7 @@ from fastapi import FastAPI, Form, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 
 from config import OUTPUT_DIRECTORY
-from core.fetcher import download_image
+from core.fetcher import download_image, image_extension
 from core.reference import process_url
 from database import delete_reference, find_existing_reference, get_all_references, init_database, save_reference, update_reference
 from handlers import get_handler
@@ -113,8 +113,7 @@ async def submit_url(url: str = Form(...)):
             action = "Updated"
         else:
             reference_id = str(uuid.uuid4())
-            extension = result.image_url.rsplit(".", 1)[-1]
-            filename = f"{reference_id}.{extension}"
+            filename = f"{reference_id}.{image_extension(result.image_url)}"
             action = "Saved"
 
         output_path = OUTPUT_DIRECTORY / filename

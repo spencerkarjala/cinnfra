@@ -48,7 +48,8 @@ INDEX_HTML = """
             background: #2a2a2a;
             border-radius: 4px;
         }}
-        .result img, .reference img {{
+        .result img, .reference img,
+        .result video, .reference video {{
             max-width: 200px;
             margin-top: 10px;
             border-radius: 4px;
@@ -85,6 +86,16 @@ INDEX_HTML = """
 """
 
 
+VIDEO_EXTENSIONS = {"mp4", "webm", "mov"}
+
+
+def render_media_html(filename: str) -> str:
+    extension = filename.rsplit(".", 1)[-1].lower()
+    if extension in VIDEO_EXTENSIONS:
+        return f'<video src="/artwork/{filename}" controls muted loop></video>'
+    return f'<img src="/artwork/{filename}" alt="Artwork">'
+
+
 def render_references_html(references: list[dict]) -> str:
     if not references:
         return "<p>No references saved yet.</p>"
@@ -93,7 +104,7 @@ def render_references_html(references: list[dict]) -> str:
     for ref in references:
         html_parts.append(f'''
         <div class="reference">
-            <img src="/artwork/{ref["filename"]}" alt="Artwork">
+            {render_media_html(ref["filename"])}
             <div class="reference-info">
                 <p><strong>{ref["artist"]}</strong> - {ref["track_name"]}</p>
                 <p class="media-type">{ref["media_type"]}</p>
@@ -118,7 +129,7 @@ def render_result_html(saved_items: list[tuple[str, any, str]]) -> str:
         <div class="result">
             <p>{action}: <strong>{result.artist}</strong> - {result.track_name}</p>
             <p class="media-type">{result.media_type}</p>
-            <img src="/artwork/{filename}" alt="Artwork">
+            {render_media_html(filename)}
         </div>
         ''')
     return "".join(result_parts)

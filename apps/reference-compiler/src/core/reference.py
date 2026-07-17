@@ -7,7 +7,7 @@ from database import find_existing_reference, save_reference, update_reference
 from handlers import get_handler
 from models import ArtworkResponse
 
-from .fetcher import download_image
+from .fetcher import download_image, image_extension
 
 
 async def process_url(url: str) -> list[ArtworkResponse]:
@@ -26,8 +26,7 @@ async def process_url(url: str) -> list[ArtworkResponse]:
             filename = existing["filename"]
         else:
             reference_id = str(uuid.uuid4())
-            extension = result.image_url.rsplit(".", 1)[-1]
-            filename = f"{reference_id}.{extension}"
+            filename = f"{reference_id}.{image_extension(result.image_url)}"
 
         output_path = OUTPUT_DIRECTORY / filename
 
