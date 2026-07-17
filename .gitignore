@@ -3,3 +3,5 @@
 /cluster/core/external-dns/charts/
 
 **/__pycache__
+
+**/node_modules/
