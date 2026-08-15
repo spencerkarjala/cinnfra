@@ -27,7 +27,7 @@ spec:
         - containerPort: 8000
         volumeMounts:
         - name: openhands-state
-          mountPath: /.openhands
+          mountPath: /home/openhands/.openhands
       volumes:
       - name: openhands-state
         persistentVolumeClaim:
