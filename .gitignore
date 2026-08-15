@@ -5,3 +5,8 @@
 **/__pycache__
 
 **/node_modules/
+
+# OpenHands workspace/project checkouts live in a PVC on the node, never in-repo;
+# ignore any stray copy so it can't be committed here.
+/apps/openhands/projects/
+/apps/openhands/workspace/
