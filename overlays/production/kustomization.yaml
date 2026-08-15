@@ -2,6 +2,7 @@ resources:
   - ../../apps/copyparty
   - ../../apps/metadata-remote
   - ../../apps/navidrome
+  - ../../apps/openhands
   - ../../apps/picard
   - ../../apps/reference-compiler
   - ../../apps/shared-storage

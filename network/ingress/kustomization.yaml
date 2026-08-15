@@ -4,5 +4,6 @@ resources:
   - copyparty.yaml
   - metadata-remote.yaml
   - navidrome.yaml
+  - openhands.yaml
   - picard.yaml
   - reference-compiler.yaml
