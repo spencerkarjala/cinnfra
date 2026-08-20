@@ -4,6 +4,15 @@ from urllib.parse import urlparse
 import httpx
 
 
+MEDIA_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (X11; Linux x86_64; rv:127.0) "
+        "Gecko/20100101 Firefox/127.0"
+    ),
+    "Accept": "image/avif,image/webp,image/png,image/jpeg,video/*,*/*;q=0.8",
+}
+
+
 async def fetch_page_content(url: str, headers: dict[str, str] | None = None) -> str:
     async with httpx.AsyncClient() as client:
         response = await client.get(url, follow_redirects=True, headers=headers)
@@ -12,8 +21,22 @@ async def fetch_page_content(url: str, headers: dict[str, str] | None = None) ->
 
 
 async def download_image(image_url: str, output_path: Path) -> None:
-    async with httpx.AsyncClient() as client:
-        response = await client.get(image_url, follow_redirects=True)
+    async with httpx.AsyncClient(headers=MEDIA_HEADERS) as client:
+        try:
+            response = await client.get(image_url, follow_redirects=True)
+        except httpx.ConnectError as error:
+            parsed_url = urlparse(image_url)
+            is_certificate_error = "CERTIFICATE_VERIFY_FAILED" in str(error).upper()
+            if parsed_url.scheme != "https" or not is_certificate_error:
+                raise
+
+            # Some older media hosts expose public files over HTTPS with a
+            # hostname-mismatched certificate. They generally also expose the
+            # same path over HTTP, which is safer than disabling certificate
+            # verification for every download handled by the service.
+            fallback_url = parsed_url._replace(scheme="http").geturl()
+            response = await client.get(fallback_url, follow_redirects=True)
+
         response.raise_for_status()
         output_path.write_bytes(response.content)
 

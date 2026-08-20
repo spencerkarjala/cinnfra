@@ -2,6 +2,7 @@
 Service for collecting reference material from URLs.
 """
 
+import sqlite3
 import uuid
 from contextlib import asynccontextmanager
 
@@ -12,9 +13,29 @@ from fastapi.responses import FileResponse, HTMLResponse
 from config import OUTPUT_DIRECTORY
 from core.fetcher import download_image, image_extension
 from core.reference import process_url
-from database import delete_reference, find_existing_reference, get_all_references, init_database, save_reference, update_reference
+from database import (
+    create_tag,
+    delete_reference,
+    delete_tag,
+    find_existing_reference,
+    get_all_references,
+    get_all_tags,
+    get_reference,
+    init_database,
+    save_reference,
+    set_reference_tags,
+    update_reference,
+    update_tag,
+)
 from handlers import get_handler
-from models import ArtworkRequest, ArtworkResponse
+from models import (
+    ArtworkRequest,
+    ArtworkResponse,
+    TagAssignment,
+    TagCreate,
+    TagResponse,
+    TagUpdate,
+)
 from ui.templates import render_error_html, render_index, render_result_html
 
 
@@ -30,6 +51,12 @@ app = FastAPI(
     description="Collects reference material from URLs",
     lifespan=lifespan,
 )
+
+
+async def render_page(result: str = "") -> str:
+    references = await get_all_references()
+    tags = await get_all_tags()
+    return render_index(result, references, tags)
 
 
 @app.post("/artwork", response_model=list[ArtworkResponse])
@@ -59,10 +86,57 @@ async def get_artwork(filename: str):
     return FileResponse(file_path)
 
 
+@app.get("/tags", response_model=list[TagResponse])
+async def list_tags():
+    return await get_all_tags()
+
+
+@app.post("/tags", response_model=TagResponse, status_code=201)
+async def create_tag_endpoint(request: TagCreate):
+    try:
+        return await create_tag(str(uuid.uuid4()), request.display_name)
+    except sqlite3.IntegrityError:
+        raise HTTPException(
+            status_code=409, detail="A tag with that display name already exists"
+        ) from None
+
+
+@app.patch("/tags/{tag_id}", response_model=TagResponse)
+async def update_tag_endpoint(tag_id: str, request: TagUpdate):
+    try:
+        tag = await update_tag(tag_id, request.display_name)
+    except sqlite3.IntegrityError:
+        raise HTTPException(
+            status_code=409, detail="A tag with that display name already exists"
+        ) from None
+
+    if tag is None:
+        raise HTTPException(status_code=404, detail="Tag not found")
+    return tag
+
+
+@app.delete("/tags/{tag_id}")
+async def delete_tag_endpoint(tag_id: str):
+    if not await delete_tag(tag_id):
+        raise HTTPException(status_code=404, detail="Tag not found")
+    return {"deleted": tag_id}
+
+
+@app.put("/reference/{reference_id}/tags", response_model=list[TagResponse])
+async def assign_reference_tags(reference_id: str, request: TagAssignment):
+    try:
+        tags = await set_reference_tags(reference_id, request.tag_ids)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    if tags is None:
+        raise HTTPException(status_code=404, detail="Reference not found")
+    return tags
+
+
 @app.delete("/reference/{reference_id}")
 async def delete_reference_endpoint(reference_id: str):
-    references = await get_all_references()
-    reference = next((r for r in references if r["id"] == reference_id), None)
+    reference = await get_reference(reference_id)
 
     if reference is None:
         raise HTTPException(status_code=404, detail="Not found")
@@ -82,8 +156,7 @@ async def health_check():
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    references = await get_all_references()
-    return render_index("", references)
+    return await render_page()
 
 
 @app.post("/", response_class=HTMLResponse)
@@ -91,17 +164,14 @@ async def submit_url(url: str = Form(...)):
     handler = get_handler(url)
 
     if handler is None:
-        references = await get_all_references()
-        return render_index(render_error_html("Unsupported URL."), references)
+        return await render_page(render_error_html("Unsupported URL."))
 
     try:
         results = await handler.fetch_artwork(url)
     except httpx.HTTPError as error:
-        references = await get_all_references()
-        return render_index(render_error_html(f"Failed to fetch page: {error}"), references)
+        return await render_page(render_error_html(f"Failed to fetch page: {error}"))
     except ValueError:
-        references = await get_all_references()
-        return render_index(render_error_html("Nothing found."), references)
+        return await render_page(render_error_html("Nothing found."))
 
     saved_items = []
     for result in results:
@@ -130,18 +200,15 @@ async def submit_url(url: str = Form(...)):
 
         saved_items.append((action, result, filename))
 
-    references = await get_all_references()
-
     if not saved_items:
-        return render_index(render_error_html("Failed to download artwork."), references)
+        return await render_page(render_error_html("Failed to download artwork."))
 
-    return render_index(render_result_html(saved_items), references)
+    return await render_page(render_result_html(saved_items))
 
 
 @app.post("/delete/{reference_id}", response_class=HTMLResponse)
 async def delete_via_form(reference_id: str):
-    references = await get_all_references()
-    reference = next((r for r in references if r["id"] == reference_id), None)
+    reference = await get_reference(reference_id)
 
     if reference:
         file_path = OUTPUT_DIRECTORY / reference["filename"]
@@ -149,5 +216,4 @@ async def delete_via_form(reference_id: str):
             file_path.unlink()
         await delete_reference(reference_id)
 
-    references = await get_all_references()
-    return render_index("", references)
+    return await render_page()
