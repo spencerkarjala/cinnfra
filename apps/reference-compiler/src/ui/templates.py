@@ -66,6 +66,11 @@ INDEX_HTML = """
             margin-top: 10px;
             border-radius: 4px;
         }
+        .preview-image { cursor: zoom-in; }
+        .preview-image:focus-visible {
+            outline: 2px solid #3391ff;
+            outline-offset: 3px;
+        }
         .reference {
             display: flex;
             gap: 15px;
@@ -168,6 +173,32 @@ INDEX_HTML = """
         .create-tag-form input { flex: 1; }
         .create-tag-form button { margin: 0; padding: 8px 14px; }
         .muted { color: #999; font-size: 14px; }
+        .media-dialog {
+            width: auto;
+            max-width: calc(100vw - 32px);
+            max-height: calc(100vh - 32px);
+            overflow: visible;
+            border: 0;
+            background: transparent;
+            box-shadow: none;
+        }
+        .media-dialog img {
+            display: block;
+            max-width: calc(100vw - 48px);
+            max-height: calc(100vh - 48px);
+            border-radius: 6px;
+            box-shadow: 0 18px 60px #000c;
+            object-fit: contain;
+        }
+        .media-dialog .close-btn {
+            position: absolute;
+            top: -12px;
+            right: -12px;
+            z-index: 1;
+            border-radius: 999px;
+            background: #333;
+            color: #fff;
+        }
         @media (max-width: 600px) {
             body { margin: 20px auto; }
             .reference { flex-direction: column; }
@@ -218,9 +249,16 @@ INDEX_HTML = """
         </div>
     </dialog>
 
+    <dialog id="media-dialog" class="media-dialog">
+        <button type="button" class="close-btn" data-close-dialog aria-label="Close image">×</button>
+        <img id="media-dialog-image" alt="">
+    </dialog>
+
     <script>
         const tagDialog = document.getElementById("tag-dialog");
         const tagManagerDialog = document.getElementById("tag-manager-dialog");
+        const mediaDialog = document.getElementById("media-dialog");
+        const mediaDialogImage = document.getElementById("media-dialog-image");
         let activeReferenceId = null;
 
         async function apiRequest(url, options) {
@@ -276,6 +314,27 @@ INDEX_HTML = """
         document.querySelectorAll("[data-close-dialog]").forEach((button) => {
             button.addEventListener("click", () => button.closest("dialog").close());
         });
+
+        function openImagePreview(image) {
+            mediaDialogImage.src = image.src;
+            mediaDialogImage.alt = image.alt;
+            mediaDialog.showModal();
+        }
+
+        document.querySelectorAll(".preview-image").forEach((image) => {
+            image.addEventListener("click", () => openImagePreview(image));
+            image.addEventListener("keydown", (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openImagePreview(image);
+                }
+            });
+        });
+
+        mediaDialog.addEventListener("click", (event) => {
+            if (event.target === mediaDialog) mediaDialog.close();
+        });
+        mediaDialog.addEventListener("close", () => mediaDialogImage.removeAttribute("src"));
 
         document.getElementById("create-tag-form").addEventListener("submit", async (event) => {
             event.preventDefault();
@@ -336,7 +395,10 @@ def render_media_html(filename: str) -> str:
     extension = filename.rsplit(".", 1)[-1].lower()
     if extension in VIDEO_EXTENSIONS:
         return f'<video src="/artwork/{escaped_filename}" controls muted loop></video>'
-    return f'<img src="/artwork/{escaped_filename}" alt="Artwork">'
+    return (
+        f'<img class="preview-image" src="/artwork/{escaped_filename}" alt="Artwork" '
+        'role="button" tabindex="0" aria-label="Open full-size artwork">'
+    )
 
 
 def render_references_html(references: list[dict]) -> str:
@@ -434,3 +496,7 @@ def render_result_html(saved_items: list[tuple[str, Any, str]]) -> str:
 
 def render_error_html(message: str) -> str:
     return f'<div class="result error">{html.escape(message)}</div>'
+
+
+def render_notice_html(message: str) -> str:
+    return f'<div class="result">{html.escape(message)}</div>'

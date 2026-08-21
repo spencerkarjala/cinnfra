@@ -78,6 +78,8 @@ class ReferenceCompilerTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("+ Add tag", page_response.text)
         self.assertIn("Buildings", page_response.text)
         self.assertIn("Apply", page_response.text)
+        self.assertIn('id="media-dialog"', page_response.text)
+        self.assertIn('class="preview-image"', page_response.text)
 
         delete_response = await self.client.delete(f"/tags/{tag['id']}")
         self.assertEqual(delete_response.status_code, 200)
@@ -144,6 +146,21 @@ class ReferenceCompilerTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(output_path.read_bytes(), b"image bytes")
         self.assertIn("Mozilla/5.0", client.call_args.kwargs["headers"]["User-Agent"])
+
+    async def test_form_posts_redirect_to_a_get(self):
+        response = await self.client.post(
+            "/", data={"url": "https://example.com/unsupported"}
+        )
+
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers["location"], "/?error=Unsupported+URL.")
+        redirected_page = await self.client.get(response.headers["location"])
+        self.assertEqual(redirected_page.status_code, 200)
+        self.assertIn("Unsupported URL.", redirected_page.text)
+
+        delete_response = await self.client.post("/delete/missing")
+        self.assertEqual(delete_response.status_code, 303)
+        self.assertEqual(delete_response.headers["location"], "/")
 
 
 if __name__ == "__main__":
