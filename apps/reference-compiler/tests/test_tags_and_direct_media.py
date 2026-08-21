@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import tempfile
@@ -6,6 +7,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import httpx
+import aiosqlite
 
 
 TEST_DIRECTORY = tempfile.TemporaryDirectory()
@@ -16,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 import database  # noqa: E402
 from core.fetcher import download_image  # noqa: E402
 from core.reference import process_url  # noqa: E402
+from handlers.x import XHandler  # noqa: E402
 from main import app  # noqa: E402
 
 
@@ -23,6 +26,7 @@ DIRECT_IMAGE_URL = (
     "https://www.maquetland.com/upload/phototeque/images/18730/"
     "9S80_ppru1_ovod%20_mtllbu%20(1).jpg"
 )
+X_VIDEO_URL = "https://x.com/artofallan/status/2043000140236243359/video/1"
 
 
 class ReferenceCompilerTest(unittest.IsolatedAsyncioTestCase):
@@ -116,6 +120,97 @@ class ReferenceCompilerTest(unittest.IsolatedAsyncioTestCase):
             responses[0].track_name, "9S80_ppru1_ovod _mtllbu (1).jpg"
         )
 
+    async def test_x_post_imports_every_video_at_the_best_quality(self):
+        response = {
+            "id_str": "2043000140236243359",
+            "text": "A compact Blender workflow https://t.co/example",
+            "display_text_range": [0, 26],
+            "user": {"screen_name": "artofallan", "name": "Broke My Pencil"},
+            "mediaDetails": [
+                {
+                    "type": "video",
+                    "video_info": {
+                        "variants": [
+                            {
+                                "content_type": "application/x-mpegURL",
+                                "url": "https://video.twimg.com/first.m3u8",
+                            },
+                            {
+                                "bitrate": 432000,
+                                "content_type": "video/mp4",
+                                "url": "https://video.twimg.com/first-small.mp4",
+                            },
+                            {
+                                "bitrate": 1280000,
+                                "content_type": "video/mp4",
+                                "url": "https://video.twimg.com/first-large.mp4",
+                            },
+                        ]
+                    },
+                },
+                {
+                    "type": "video",
+                    "video_info": {
+                        "variants": [
+                            {
+                                "bitrate": 832000,
+                                "content_type": "video/mp4",
+                                "url": "https://video.twimg.com/second.mp4",
+                            }
+                        ]
+                    },
+                },
+            ],
+        }
+
+        with patch(
+            "handlers.x.fetch_page_content",
+            new=AsyncMock(return_value=json.dumps(response)),
+        ) as fetch:
+            results = await XHandler().fetch_artwork(X_VIDEO_URL)
+
+        self.assertIn("id=2043000140236243359", fetch.await_args.args[0])
+        self.assertEqual(
+            [result.image_url for result in results],
+            [
+                "https://video.twimg.com/first-large.mp4",
+                "https://video.twimg.com/second.mp4",
+            ],
+        )
+        self.assertEqual(
+            [result.media_type for result in results],
+            ["X_POST_VIDEO", "X_POST_VIDEO_1"],
+        )
+        self.assertEqual(results[0].artist, "artofallan")
+        self.assertEqual(results[0].track_name, "A compact Blender workflow")
+
+    async def test_x_handler_supports_twitter_urls_and_images(self):
+        handler = XHandler()
+        self.assertTrue(handler.can_handle(X_VIDEO_URL))
+        self.assertTrue(
+            handler.can_handle(
+                "https://twitter.com/artofallan/status/2043000140236243359"
+            )
+        )
+
+        response = {
+            "id_str": "123",
+            "text": "Reference image",
+            "user": {"name": "An Artist"},
+            "mediaDetails": [
+                {"type": "photo", "media_url_https": "https://pbs.twimg.com/a.jpg"}
+            ],
+        }
+        with patch(
+            "handlers.x.fetch_page_content",
+            new=AsyncMock(return_value=json.dumps(response)),
+        ):
+            results = await handler.fetch_artwork("https://x.com/example/status/123")
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].media_type, "X_POST_IMAGE")
+        self.assertEqual(results[0].artist, "An Artist")
+
     async def test_download_retries_http_for_a_bad_https_certificate(self):
         class FakeClient:
             def __init__(self):
@@ -161,6 +256,54 @@ class ReferenceCompilerTest(unittest.IsolatedAsyncioTestCase):
         delete_response = await self.client.post("/delete/missing")
         self.assertEqual(delete_response.status_code, 303)
         self.assertEqual(delete_response.headers["location"], "/")
+
+    async def test_unicode_reference_notes(self):
+        await database.save_reference(
+            "reference-1",
+            "https://example.com/image.jpg",
+            "Example",
+            "image.jpg",
+            "DIRECT_MEDIA_IMAGE",
+            "reference-1.jpg",
+        )
+        notes = "我喜欢这个轮廓 — très beau 🚀\nKeep the <strong>contrast</strong>."
+
+        response = await self.client.patch(
+            "/reference/reference-1/notes", json={"notes": notes}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"reference_id": "reference-1", "notes": notes})
+        self.assertEqual((await database.get_all_references())[0]["notes"], notes)
+
+        page = await self.client.get("/")
+        self.assertIn("我喜欢这个轮廓 — très beau 🚀", page.text)
+        self.assertIn("&lt;strong&gt;contrast&lt;/strong&gt;", page.text)
+        self.assertNotIn("<strong>contrast</strong>", page.text)
+
+    async def test_existing_database_gets_notes_column(self):
+        database_path = Path(os.environ["DATABASE_PATH"])
+        database_path.unlink()
+        async with aiosqlite.connect(database_path) as db:
+            await db.execute("""
+                CREATE TABLE art_references (
+                    id TEXT PRIMARY KEY,
+                    url TEXT NOT NULL,
+                    artist TEXT NOT NULL,
+                    track_name TEXT NOT NULL,
+                    media_type TEXT NOT NULL,
+                    filename TEXT NOT NULL,
+                    fetched_at TEXT NOT NULL
+                )
+            """)
+            await db.commit()
+
+        await database.init_database()
+
+        async with aiosqlite.connect(database_path) as db:
+            async with db.execute("PRAGMA table_info(art_references)") as cursor:
+                columns = {row[1] for row in await cursor.fetchall()}
+        self.assertIn("notes", columns)
 
 
 if __name__ == "__main__":

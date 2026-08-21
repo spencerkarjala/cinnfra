@@ -78,6 +78,23 @@ INDEX_HTML = """
         }
         .reference-info { flex: 1; min-width: 0; }
         .reference-info p { margin: 5px 0; }
+        .note-editor { margin: 12px 0; }
+        .reference-notes {
+            display: block;
+            width: 100%;
+            min-height: 72px;
+            padding: 9px;
+            resize: vertical;
+            border: 1px solid #444;
+            border-radius: 4px;
+            background: #202020;
+            color: #e0e0e0;
+            font: inherit;
+            box-sizing: border-box;
+        }
+        .note-actions { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+        .save-note-btn { margin: 0; padding: 6px 10px; font-size: 13px; }
+        .note-status { color: #8fc98f; font-size: 12px; }
         .error { color: #ff6b6b; }
         a { color: #66b3ff; }
         hr { border-color: #444; margin: 30px 0; }
@@ -388,6 +405,40 @@ INDEX_HTML = """
                 }
             });
         });
+
+        document.querySelectorAll(".save-note-btn").forEach((button) => {
+            button.addEventListener("click", async () => {
+                const editor = button.closest(".note-editor");
+                const textarea = editor.querySelector(".reference-notes");
+                const status = editor.querySelector(".note-status");
+                button.disabled = true;
+                status.textContent = "Saving…";
+                try {
+                    await apiRequest(
+                        `/reference/${encodeURIComponent(button.dataset.referenceId)}/notes`,
+                        {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ notes: textarea.value }),
+                        },
+                    );
+                    status.textContent = "Saved";
+                } catch (error) {
+                    status.textContent = error.message;
+                } finally {
+                    button.disabled = false;
+                }
+            });
+        });
+
+        document.querySelectorAll(".reference-notes").forEach((textarea) => {
+            textarea.addEventListener("keydown", (event) => {
+                if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+                    event.preventDefault();
+                    textarea.closest(".note-editor").querySelector(".save-note-btn").click();
+                }
+            });
+        });
     </script>
 </body>
 </html>
@@ -423,6 +474,7 @@ def render_references_html(references: list[dict]) -> str:
             for tag in tags
         )
         reference_id = html.escape(ref["id"], quote=True)
+        notes = html.escape(ref.get("notes", ""))
         tag_controls = f'''
             <div class="tag-list">
                 {tag_chips}
@@ -438,6 +490,13 @@ def render_references_html(references: list[dict]) -> str:
                 <p class="media-type">{html.escape(ref["media_type"])}</p>
                 <p><a href="{html.escape(ref["url"], quote=True)}" target="_blank" rel="noopener">Source</a></p>
                 {tag_controls}
+                <div class="note-editor">
+                    <textarea class="reference-notes" placeholder="Notes about what you like…">{notes}</textarea>
+                    <div class="note-actions">
+                        <button type="button" class="save-note-btn" data-reference-id="{reference_id}">Save note</button>
+                        <span class="note-status" aria-live="polite"></span>
+                    </div>
+                </div>
                 <form method="post" action="/delete/{reference_id}" style="margin:0">
                     <button type="submit" class="delete-btn">Delete</button>
                 </form>

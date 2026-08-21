@@ -26,12 +26,15 @@ from database import (
     save_reference,
     set_reference_tags,
     update_reference,
+    update_reference_notes,
     update_tag,
 )
 from handlers import get_handler
 from models import (
     ArtworkRequest,
     ArtworkResponse,
+    ReferenceNotesResponse,
+    ReferenceNotesUpdate,
     TagAssignment,
     TagCreate,
     TagResponse,
@@ -141,6 +144,17 @@ async def assign_reference_tags(reference_id: str, request: TagAssignment):
     if tags is None:
         raise HTTPException(status_code=404, detail="Reference not found")
     return tags
+
+
+@app.patch(
+    "/reference/{reference_id}/notes", response_model=ReferenceNotesResponse
+)
+async def update_reference_notes_endpoint(
+    reference_id: str, request: ReferenceNotesUpdate
+):
+    if not await update_reference_notes(reference_id, request.notes):
+        raise HTTPException(status_code=404, detail="Reference not found")
+    return ReferenceNotesResponse(reference_id=reference_id, notes=request.notes)
 
 
 @app.delete("/reference/{reference_id}")

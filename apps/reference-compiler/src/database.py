@@ -23,9 +23,16 @@ async def init_database():
                 track_name TEXT NOT NULL,
                 media_type TEXT NOT NULL,
                 filename TEXT NOT NULL,
+                notes TEXT NOT NULL DEFAULT '',
                 fetched_at TEXT NOT NULL
             )
         """)
+        async with db.execute("PRAGMA table_info(art_references)") as cursor:
+            columns = {row[1] for row in await cursor.fetchall()}
+        if "notes" not in columns:
+            await db.execute(
+                "ALTER TABLE art_references ADD COLUMN notes TEXT NOT NULL DEFAULT ''"
+            )
         await db.execute("""
             CREATE TABLE IF NOT EXISTS tags (
                 id TEXT PRIMARY KEY,
@@ -89,6 +96,16 @@ async def update_reference(
             (artist, track_name, datetime.now(timezone.utc).isoformat(), reference_id),
         )
         await db.commit()
+
+
+async def update_reference_notes(reference_id: str, notes: str) -> bool:
+    async with connect_database() as db:
+        cursor = await db.execute(
+            "UPDATE art_references SET notes = ? WHERE id = ?",
+            (notes, reference_id),
+        )
+        await db.commit()
+        return cursor.rowcount > 0
 
 
 async def get_all_references() -> list[dict]:

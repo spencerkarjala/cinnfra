@@ -10,6 +10,8 @@ class MediaType:
     SOUNDCLOUD_PROFILE_HEADER = "SOUNDCLOUD_PROFILE_HEADER"
     INSTAGRAM_POST_IMAGE = "INSTAGRAM_POST_IMAGE"
     INSTAGRAM_POST_VIDEO = "INSTAGRAM_POST_VIDEO"
+    X_POST_IMAGE = "X_POST_IMAGE"
+    X_POST_VIDEO = "X_POST_VIDEO"
     DIRECT_MEDIA_IMAGE = "DIRECT_MEDIA_IMAGE"
     DIRECT_MEDIA_VIDEO = "DIRECT_MEDIA_VIDEO"
 
@@ -61,3 +63,12 @@ class TagResponse(BaseModel):
 
 class TagAssignment(BaseModel):
     tag_ids: list[str] = Field(default_factory=list)
+
+
+class ReferenceNotesUpdate(BaseModel):
+    notes: str
+
+
+class ReferenceNotesResponse(BaseModel):
+    reference_id: str
+    notes: str
