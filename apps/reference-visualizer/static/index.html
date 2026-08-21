@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reference Visualizer</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="app">
+    <aside class="library">
+      <header class="library-header">
+        <h1>References</h1>
+        <input id="reference-search" type="search" placeholder="Search references" autocomplete="off">
+      </header>
+      <div id="reference-list" class="reference-list" aria-live="polite"></div>
+    </aside>
+
+    <main class="workspace">
+      <header class="toolbar">
+        <select id="board-select" aria-label="Current mood board"></select>
+        <button id="new-board" type="button">New board</button>
+        <button id="delete-board" class="danger" type="button">Delete</button>
+        <span class="toolbar-spacer"></span>
+        <span id="save-status" class="save-status">Ready</span>
+        <button id="reset-view" class="quiet" type="button">Reset view</button>
+      </header>
+
+      <div id="board-viewport" class="board-viewport" tabindex="0">
+        <div id="board-stage" class="board-stage"></div>
+        <div id="empty-board" class="empty-board">
+          <strong>Build a mood board</strong>
+          <span>Click or drag references here. Drag the background to pan and scroll to zoom.</span>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

@@ -5,6 +5,7 @@ resources:
   - ../../apps/openhands
   - ../../apps/picard
   - ../../apps/reference-compiler
+  - ../../apps/reference-visualizer
   - ../../apps/shared-storage
   - ../../cluster/core/external-dns
   - ../../cluster/core/namespaces

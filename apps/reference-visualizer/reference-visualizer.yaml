@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reference-visualizer
+  namespace: apps
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reference-visualizer
+  template:
+    metadata:
+      labels:
+        app: reference-visualizer
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+      - name: reference-visualizer
+        image: ghcr.io/spencerkarjala/reference-visualizer:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+        env:
+        - name: ARTWORK_DIR
+          value: /data
+        - name: REFERENCES_DATABASE_PATH
+          value: /data/references.db
+        - name: BOARDS_DATABASE_PATH
+          value: /data/boards.db
+        - name: STATIC_DIR
+          value: /home/vizuser/static
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 2
+          periodSeconds: 5
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: references
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reference-visualizer
+  namespace: apps
+spec:
+  selector:
+    app: reference-visualizer
+  ports:
+  - port: 80
+    targetPort: 8000

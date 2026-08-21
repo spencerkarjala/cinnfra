@@ -7,3 +7,4 @@ resources:
   - openhands.yaml
   - picard.yaml
   - reference-compiler.yaml
+  - reference-visualizer.yaml

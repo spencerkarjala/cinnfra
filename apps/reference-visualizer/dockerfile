@@ -1,0 +1,22 @@
+FROM docker.io/library/python:3.12-slim
+
+RUN useradd -m -u 1000 vizuser
+USER vizuser
+
+ENV VISUALIZER_DIR=/home/vizuser
+WORKDIR $VISUALIZER_DIR
+
+COPY --chown=vizuser:vizuser ./apps/reference-visualizer/server $VISUALIZER_DIR
+COPY --chown=vizuser:vizuser ./apps/reference-visualizer/static $VISUALIZER_DIR/static
+COPY --chown=vizuser:vizuser ./apps/reference-visualizer/pyproject.toml $VISUALIZER_DIR
+COPY --chown=vizuser:vizuser ./apps/reference-visualizer/uv.lock $VISUALIZER_DIR
+
+ENV PATH=$PATH:/home/vizuser/.local/bin/
+ENV STATIC_DIR=/home/vizuser/static
+RUN pip install --no-cache-dir uv==0.9.5 \
+    && uv sync --frozen --no-dev \
+    && pip uninstall --yes uv
+
+EXPOSE 8000
+
+CMD ["/home/vizuser/.venv/bin/uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
