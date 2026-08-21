@@ -91,6 +91,7 @@ button.quiet {
 
 .reference-list {
   display: grid;
+  flex: 1;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-content: start;
   gap: 8px;
