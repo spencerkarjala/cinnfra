@@ -34,6 +34,13 @@ function isVideo(reference) {
   return reference.media_type.includes("VIDEO") || /\.(m4v|mov|mp4|webm)$/i.test(reference.filename);
 }
 
+function createItemId() {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  return `item-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
 async function request(path, options = {}) {
   const response = await fetch(path, options);
   let payload = null;
@@ -266,7 +273,7 @@ async function ensureBoard() {
 async function addReference(reference, x, y) {
   const board = await ensureBoard();
   const item = {
-    id: crypto.randomUUID(),
+    id: createItemId(),
     reference_id: reference.id,
     position_x: Math.round(x - DEFAULT_ITEM_SIZE.width / 2),
     position_y: Math.round(y - DEFAULT_ITEM_SIZE.height / 2),
