@@ -174,14 +174,21 @@ INDEX_HTML = """
         .create-tag-form button { margin: 0; padding: 8px 14px; }
         .muted { color: #999; font-size: 14px; }
         .media-dialog {
-            width: auto;
-            max-width: calc(100vw - 32px);
-            max-height: calc(100vh - 32px);
-            overflow: visible;
+            position: fixed;
+            inset: 0;
+            width: 100vw;
+            height: 100vh;
+            max-width: none;
+            max-height: none;
+            margin: 0;
+            padding: 24px;
+            overflow: hidden;
             border: 0;
             background: transparent;
             box-shadow: none;
+            box-sizing: border-box;
         }
+        .media-dialog[open] { display: grid; place-items: center; }
         .media-dialog img {
             display: block;
             max-width: calc(100vw - 48px);
@@ -191,9 +198,9 @@ INDEX_HTML = """
             object-fit: contain;
         }
         .media-dialog .close-btn {
-            position: absolute;
-            top: -12px;
-            right: -12px;
+            position: fixed;
+            top: 12px;
+            right: 12px;
             z-index: 1;
             border-radius: 999px;
             background: #333;
