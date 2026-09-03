@@ -723,7 +723,7 @@ def check_releases_ready(releases: list[Release]) -> list[Release]:
 
         done_key = next(
             (
-                key
+                _normalize_mutagen_tag_key(key)
                 for key in tags
                 if _normalize_mutagen_tag_key(key).lower() == "done"
             ),

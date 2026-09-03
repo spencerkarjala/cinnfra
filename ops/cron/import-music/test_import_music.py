@@ -21,6 +21,16 @@ class FakeAudio:
         self.tags = tags
 
 
+class TupleIteratingTags:
+    def __iter__(self):
+        return iter([("DONE", "1")])
+
+    def __getitem__(self, key):
+        if not isinstance(key, str):
+            raise TypeError("tag lookups require a string key")
+        return ["1"]
+
+
 class CheckReleasesReadyTests(unittest.TestCase):
     def test_only_returns_releases_with_every_track_marked_done(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -58,6 +68,26 @@ class CheckReleasesReadyTests(unittest.TestCase):
                 )
 
             self.assertEqual(ready_releases, [import_music.Release(path=ready_path)])
+
+    def test_normalizes_tuple_keys_before_looking_up_done_value(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            release_path = Path(temp_dir)
+            track_path = release_path / "track.flac"
+            track_path.touch()
+
+            with patch.object(
+                import_music.mutagen,
+                "File",
+                return_value=FakeAudio(TupleIteratingTags()),
+            ):
+                ready_releases = import_music.check_releases_ready(
+                    [import_music.Release(path=release_path)]
+                )
+
+            self.assertEqual(
+                ready_releases,
+                [import_music.Release(path=release_path)],
+            )
 
 
 class MainTests(unittest.TestCase):
