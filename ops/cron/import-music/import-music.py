@@ -721,10 +721,18 @@ def check_releases_ready(releases: list[Release]) -> list[Release]:
         tags = audio.tags
         truthy_values = {"1", "true", "yes", "y"}
 
-        if "done" not in tags:
+        done_key = next(
+            (
+                key
+                for key in tags
+                if _normalize_mutagen_tag_key(key).lower() == "done"
+            ),
+            None,
+        )
+        if done_key is None:
             return False
 
-        value = tags["done"]
+        value = tags[done_key]
         if isinstance(value, (list, tuple)):
             if not value:
                 return False
@@ -976,14 +984,29 @@ def main() -> None:
     print()
 
     print(f"Scanning {ROOT_MUSIC_DIR} for releases...")
-    releases_to_validate = identify_release_directories(ROOT_MUSIC_DIR)
-    print(f"Found {len(releases_to_validate)} release(s) to process")
+    release_paths = identify_release_directories(ROOT_MUSIC_DIR)
+    releases = [Release(path=path) for path in release_paths]
+    print(f"Found {len(releases)} release(s) in staging")
     print()
 
     print("-" * 80)
-    print("STEP 1: PREPROCESSING")
+    print("STEP 1: CHECKING FOR READY RELEASES")
     print("-" * 80)
-    preprocessed_releases, preprocess_failures = preprocess_releases(releases_to_validate)
+    ready_releases = check_releases_ready(releases)
+    print(f"Found {len(ready_releases)} release(s) marked as done and ready to process")
+    print()
+
+    if not ready_releases:
+        print("No releases ready to process. Exiting.")
+        print("=" * 80)
+        return
+
+    print("-" * 80)
+    print("STEP 2: PREPROCESSING")
+    print("-" * 80)
+    preprocessed_releases, preprocess_failures = preprocess_releases(
+        [release.path for release in ready_releases]
+    )
     print(f"Preprocessed: {len(preprocessed_releases)} succeeded, {len(preprocess_failures)} failed")
 
     if preprocess_failures:
@@ -994,7 +1017,7 @@ def main() -> None:
             print()
 
     print("-" * 80)
-    print("STEP 2: VALIDATION")
+    print("STEP 3: VALIDATION")
     print("-" * 80)
     validated_releases, validation_failures = validate_releases(preprocessed_releases)
     print(f"Validated: {len(validated_releases)} succeeded, {len(validation_failures)} failed")
@@ -1005,24 +1028,16 @@ def main() -> None:
             print(f"--- {failure.path} ---")
             print(failure.error)
             print()
-        return
 
-    print("-" * 80)
-    print("STEP 3: CHECKING FOR READY RELEASES")
-    print("-" * 80)
-    ready_to_publish = check_releases_ready(validated_releases)
-    print(f"Found {len(ready_to_publish)} release(s) marked as done and ready to publish")
-    print()
-
-    if not ready_to_publish:
-        print("No releases ready to publish. Exiting.")
+    if not validated_releases:
+        print("No valid releases ready to publish. Exiting.")
         print("=" * 80)
         return
 
     print("-" * 80)
     print("STEP 4: PUBLISHING TO LIBRARY")
     print("-" * 80)
-    published, publish_failures = publish_releases(ready_to_publish, LIBRARY_PATH)
+    published, publish_failures = publish_releases(validated_releases, LIBRARY_PATH)
     print(f"\nPublished: {len(published)} succeeded, {len(publish_failures)} failed")
 
     if publish_failures:
